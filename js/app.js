@@ -219,7 +219,7 @@
       out.regions.push({
         id: str(r.id) || uid(), name: str(r.name), description: str(r.description),
         color: safeColor(r.color, '#9b6dff'), font: validFont(r.font, 'Cinzel'),
-        size: REGION_SIZES[r.size] ? r.size : 'l', coast: r.coast !== false, points, shape: normShape(r.shape)
+        size: REGION_SIZES[r.size] ? r.size : 'l', coast: r.coast !== false, rough: r.rough !== false, points, shape: normShape(r.shape)
       });
     }
     for (const l of arr(d.locations)) {
@@ -253,9 +253,10 @@
     }
     for (const f of arr(d.fog)) {
       if (!f) continue;
+      // Fog is a painted shape; older fog drawn with corner clicks is converted.
       const points = arr(f.points).filter((p) => Array.isArray(p) && num(p[0]) != null && num(p[1]) != null).map((p) => [num(p[0]), num(p[1])]);
-      if (points.length < 3) continue;
-      out.fog.push({ id: str(f.id) || uid(), name: str(f.name), active: f.active !== false, points });
+      const shape = normShape(f.shape) || (points.length >= 3 ? [[[...points, points[0]]]] : null);
+      out.fog.push({ id: str(f.id) || uid(), name: str(f.name), active: f.active !== false, shape });
     }
     return out;
   }
@@ -395,7 +396,12 @@
     lockZoom();
     window.addEventListener('resize', fitSize);
     map.on('click', onMapClick);
-    map.on('dblclick', (e) => { if (mode && mode.type === 'region') { e.preventDefault(); finishRegion(); } });
+    map.on('dblclick', (e) => { if (mode && (mode.type === 'region' || mode.type === 'brush')) { e.preventDefault(); if (mode.type === 'region') finishRegion(); } });
+    map.on('mousedown', brushDown); map.on('touchstart', brushDown);
+    map.on('mousemove', brushMove); map.on('touchmove', brushMove);
+    map.on('mouseup', brushUp); map.on('touchend', brushUp);
+    window.addEventListener('mouseup', brushUp);
+    map.getContainer().addEventListener('mouseleave', () => { const c = $('#brush-cursor'); if (c) c.style.display = 'none'; });
     map.on('zoom', fitRegionLabels);
     map.on('resize', () => { lockZoom(); fitRegionLabels(); });
     if (document.fonts) document.fonts.addEventListener('loadingdone', fitRegionLabels);
@@ -470,12 +476,13 @@
     return c;
   }
   // Is this spot hidden from players?
-  const fogged = (lng, lat) => !editing && activeFog().some((f) => inRing(f.points, lng, lat));
+  const inShape = (shape, x, y) => !!shape && shape.some((poly) => inRing(poly[0], x, y) && !poly.slice(1).some((hole) => inRing(hole, x, y)));
+  const fogged = (lng, lat) => !editing && activeFog().some((f) => inShape(f.shape, lng, lat));
   function renderFog() {
     if (!styleReady) return;
     map.getSource('fog').setData({
       type: 'FeatureCollection',
-      features: data.fog.map((f) => ({ type: 'Feature', properties: { id: f.id, active: f.active }, geometry: { type: 'Polygon', coordinates: [[...f.points, f.points[0]]] } }))
+      features: data.fog.filter((f) => f.shape).map((f) => ({ type: 'Feature', properties: { id: f.id, active: f.active }, geometry: { type: 'MultiPolygon', coordinates: f.shape } }))
     });
     map.setPaintProperty('fog-fill', 'fill-opacity', editing ? 0.55 : 0.98);
     map.setPaintProperty('fog-edge', 'line-opacity', editing ? 0 : 0.9);
@@ -630,8 +637,46 @@
     if (Math.abs(a) < 1e-12) return pts.reduce((s, p) => [s[0] + p[0] / pts.length, s[1] + p[1] / pts.length], [0, 0]);
     return [x / (3 * a), y / (3 * a)];
   }
-  const regionPolys = (r) => (r.shape ? r.shape : [[[...r.points, r.points[0]]]]);
-  const regionGeom = (r) => (r.shape ? { type: 'MultiPolygon', coordinates: r.shape } : { type: 'Polygon', coordinates: [[...r.points, r.points[0]]] });
+  // Rough, hand-drawn-looking border: each straight edge gets fractal wiggles (same every time for a region).
+  function seededRandom(text) {
+    let h = 2166136261;
+    for (const ch of text) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+    return () => { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; return (h >>> 0) / 4294967296; };
+  }
+  const roughCache = new Map();
+  function roughRing(points, seed) {
+    const key = seed + JSON.stringify(points);
+    if (roughCache.has(key)) return roughCache.get(key);
+    const rnd = seededRandom(seed);
+    const k = Math.cos(points[0][1] * Math.PI / 180);
+    const out = [];
+    for (let i = 0; i < points.length; i++) {
+      const a = points[i], b = points[(i + 1) % points.length];
+      let seg = [a, b];
+      let amp = Math.hypot((b[0] - a[0]) * k, b[1] - a[1]) * 0.11;
+      for (let lvl = 0; lvl < 6; lvl++) {
+        const next = [seg[0]];
+        for (let j = 0; j < seg.length - 1; j++) {
+          const p = seg[j], q = seg[j + 1];
+          const dx = (q[0] - p[0]) * k, dy = q[1] - p[1], len = Math.hypot(dx, dy) || 1;
+          const off = (rnd() - 0.5) * 2 * amp;
+          next.push([(p[0] + q[0]) / 2 + (-dy / len) * off / k, (p[1] + q[1]) / 2 + (dx / len) * off]);
+          next.push(q);
+        }
+        seg = next;
+        amp *= 0.52;
+      }
+      seg.pop();
+      out.push(...seg);
+    }
+    out.push(out[0]);
+    const v = out.map((p) => [Math.round(p[0] * 1e5) / 1e5, Math.round(p[1] * 1e5) / 1e5]);
+    roughCache.set(key, v);
+    return v;
+  }
+  const outlineRing = (r) => (r.rough ? roughRing(r.points, r.id) : [...r.points, r.points[0]]);
+  const regionPolys = (r) => (r.shape ? r.shape : [[outlineRing(r)]]);
+  const regionGeom = (r) => ({ type: 'MultiPolygon', coordinates: regionPolys(r) });
   function ringArea(ring) {
     let a = 0;
     for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) a += (ring[j][0] + ring[i][0]) * (ring[j][1] - ring[i][1]);
@@ -676,7 +721,7 @@
   }
   const labelCache = new Map();
   function regionLabelPos(r) {
-    const key = JSON.stringify(r.shape || r.points);
+    const key = r.rough + JSON.stringify(r.shape || r.points);
     const hit = labelCache.get(r.id);
     if (hit && hit.key === key) return hit;
     const poly = regionPolys(r).reduce((a, b) => (ringArea(b[0]) > ringArea(a[0]) ? b : a));
@@ -1177,7 +1222,7 @@
     else if (currentView === 'quest' && byQuest(selectedId)) showQuestForm(byQuest(selectedId));
     else if (currentView === 'region' && byRegion(selectedId)) showRegionForm(byRegion(selectedId));
     else if (currentView === 'fogarea' && byFog(selectedId)) showFogForm(byFog(selectedId));
-    else if (currentView === 'fog' || currentView === 'fogarea') showFog();
+    else if (currentView === 'fog' || currentView === 'fogarea' || currentView === 'brush') showFog();
     else if (currentView === 'settings') showSettings();
     else if (currentView === 'regions' || currentView === 'region') showRegions();
     else if (currentView === 'quests' || currentView === 'quest') showQuests();
@@ -1200,8 +1245,14 @@
     document.body.classList.remove('placing');
     $('#hint').hidden = true;
     if (map) map.doubleClickZoom.enable();
+    if (m.type === 'brush') {
+      map.dragPan.enable();
+      const c = $('#brush-cursor');
+      if (c) c.style.display = 'none';
+    }
     updateDraft();
     if (silent) return;
+    if (m.type === 'brush') { showFog(); return; }
     if (m.type === 'quest' && byQuest(m.id)) showQuestForm(byQuest(m.id));
     else if (m.target === 'fog') { if (m.editId && byFog(m.editId)) showFogForm(byFog(m.editId)); else showFog(); }
     else if (m.type === 'region' && m.editId && byRegion(m.editId)) showRegionForm(byRegion(m.editId));
@@ -1209,6 +1260,7 @@
   }
   function handleModeClick(ll) {
     const p = [round6(ll.lng), round6(ll.lat)];
+    if (mode.type === 'brush') return;
     if (mode.type === 'pin') { cancelMode(true); placePin(p); }
     else if (mode.type === 'quest') {
       const q = byQuest(mode.id);
@@ -1245,15 +1297,16 @@
     cancelMode(true);
     if (target === 'fog') {
       let f = editId && byFog(editId);
-      if (f) f.points = pts;
-      else { f = { id: uid(), name: 'Fog ' + (data.fog.length + 1), active: true, points: pts }; data.fog.push(f); }
+      const shape = [[[...pts, pts[0]]]];
+      if (f) f.shape = shape;
+      else { f = { id: uid(), name: 'Fog ' + (data.fog.length + 1), active: true, shape }; data.fog.push(f); }
       renderFog(); changed(); showFogForm(f);
       return;
     }
     let r = editId && byRegion(editId);
     if (r) { r.points = pts; r.shape = null; }
     else {
-      r = { id: uid(), name: 'New region', description: '', color: '#9b6dff', font: 'Cinzel', size: 'l', coast: true, points: pts, shape: null };
+      r = { id: uid(), name: 'New region', description: '', color: '#9b6dff', font: 'Cinzel', size: 'l', coast: true, rough: true, points: pts, shape: null };
       data.regions.push(r);
     }
     renderRegions(); changed(); showRegionForm(r);
@@ -1296,7 +1349,7 @@
           if (b[2] >= bb[0] && b[0] <= bb[2] && b[3] >= bb[1] && b[1] <= bb[3]) water.push(p);
         }
       }
-      const outline = [[...r.points, r.points[0]]];
+      const outline = [outlineRing(r)];
       let shape = water.length ? pc.difference(outline, ...water) : null;
       if (shape) {
         // Tidy up: drop slivers and tiny holes, thin out points, round coordinates.
@@ -1678,6 +1731,18 @@
     cl.appendChild(cb);
     cl.appendChild(document.createTextNode(' Follow the coastline (leave out water)'));
     b.appendChild(cl);
+    const rl = el('label', 'check');
+    const rb = el('input');
+    rb.type = 'checkbox';
+    rb.checked = r.rough;
+    rb.onchange = () => {
+      r.rough = rb.checked;
+      if (r.coast) traceCoast(r);
+      else { r.shape = null; refresh(); }
+    };
+    rl.appendChild(rb);
+    rl.appendChild(document.createTextNode(' Rough, natural border on land'));
+    b.appendChild(rl);
     b.appendChild(colorField('Color', r.color, (c) => { r.color = c; refresh(); }));
     const foot = el('div', 'form-foot');
     foot.appendChild(btn('Delete region', 'danger', async () => {
@@ -1694,17 +1759,21 @@
   function showFog() {
     currentView = 'fog'; selectedId = null; setTab('fog'); updateStatus(); popup.remove();
     const b = body();
-    b.appendChild(btn('+ Draw fog area', 'primary list-add', () => startDrawing(null, 'fog')));
+    b.appendChild(btn('+ Paint new fog', 'primary list-add', () => {
+      const f = { id: uid(), name: 'Fog ' + (data.fog.length + 1), active: true, shape: null };
+      data.fog.push(f); changed(); startBrush(f.id, false);
+    }));
     b.appendChild(btn('Fog the whole map', 'small list-add', () => {
       const [[w, s], [e, n]] = LOCK_BOUNDS;
-      const f = { id: uid(), name: 'Whole map', active: true, points: [[w - 0.05, s - 0.05], [e + 0.05, s - 0.05], [e + 0.05, n + 0.05], [w - 0.05, n + 0.05]] };
-      data.fog.push(f); renderFog(); changed(); showFogForm(f);
+      const f = { id: uid(), name: 'Whole map', active: true, shape: [[[[w - 0.05, s - 0.05], [e + 0.05, s - 0.05], [e + 0.05, n + 0.05], [w - 0.05, n + 0.05], [w - 0.05, s - 0.05]]]] };
+      data.fog.push(f); renderAll(); changed(); showFogForm(f);
     }));
-    b.appendChild(el('p', 'tip', 'Players see fog as a dark cover, and any pins, quests or region names under it are hidden. You see it see-through here. Lift the fog when the party explores an area.'));
+    if (data.fog.some((f) => f.shape)) b.appendChild(btn('Erase fog (reveal explored areas)', 'small list-add', () => startBrush(null, true)));
+    b.appendChild(el('p', 'tip', 'Paint fog by dragging a circle brush over the map, and erase it as the party explores. Players see a dark cover that hides any pins, quests or region names under it. You see it see-through here.'));
     if (!data.fog.length) { b.appendChild(el('p', 'muted', 'No fog yet.')); return; }
     const ul = el('ul', 'pin-list');
-    data.fog.forEach((f) => ul.appendChild(listButton('#55555e', f.name || 'Fog area', f.active ? ['hidden', 'Fogged'] : ['done', 'Lifted'], () => {
-      map.easeTo({ center: centroid(f.points), duration: 500 });
+    data.fog.forEach((f) => ul.appendChild(listButton('#55555e', f.name || 'Fog area', !f.shape ? ['hidden', 'Empty'] : f.active ? ['hidden', 'Fogged'] : ['done', 'Lifted'], () => {
+      if (f.shape) { const bb = ringBox(f.shape.flatMap((p) => p[0])); map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: 60, duration: 500 }); }
       showFogForm(f);
     })));
     b.appendChild(ul);
@@ -1723,15 +1792,131 @@
     box.appendChild(el('div', null, f.active ? 'Fogged: players can’t see this area.' : 'Lifted: players can see this area.'));
     box.appendChild(btn(f.active ? 'Lift the fog' : 'Bring the fog back', f.active ? 'accent' : 'small', () => { f.active = !f.active; renderAll(); changed(); showFogForm(f); }));
     b.appendChild(box);
+    const tools = el('div', 'btn-row');
+    tools.appendChild(btn('Paint more fog', 'small', () => startBrush(f.id, false)));
+    tools.appendChild(btn('Erase fog', 'small', () => startBrush(null, true)));
+    b.appendChild(tools);
     b.appendChild(el('p', 'tip', 'Press Publish afterwards so your players see the change.'));
     const foot = el('div', 'form-foot');
     foot.appendChild(btn('Delete', 'danger', async () => {
       if (!(await ask(`Delete “${f.name || 'this fog area'}”?`, 'Delete', 'Keep it'))) return;
-      data.fog = data.fog.filter((x) => x !== f); renderFog(); changed(); showFog();
+      data.fog = data.fog.filter((x) => x !== f); renderAll(); changed(); showFog();
     }));
-    foot.appendChild(btn('Redraw shape', 'small', () => startDrawing(f.id, 'fog')));
     foot.appendChild(btn('Done', 'primary', showFog));
     b.appendChild(foot);
+  }
+
+  // --- Fog brush: drag a circle over the map to paint or erase fog ---
+  let brushSize = 45; // radius in screen pixels
+  function startBrush(fogId, erase) {
+    cancelMode(true);
+    setMode({ type: 'brush', id: fogId, erase, stroke: [], painting: false, last: null },
+      erase ? 'Drag over the map to erase fog · Esc or Done when finished' : 'Drag over the map to paint fog · Esc or Done when finished');
+    map.dragPan.disable();
+    loadClipper().catch(() => toast('Couldn’t load the brush tool. Check your internet connection.', 'error'));
+    showBrushPanel();
+  }
+  function showBrushPanel() {
+    currentView = 'brush'; setTab('fog');
+    const b = body();
+    const m = mode;
+    b.appendChild(el('p', null, m.erase ? 'Erasing: drag over fog to clear it (this works on every fog area).' : 'Painting: drag over the map to add fog.'));
+    const row = el('div', 'btn-row');
+    const f = m.id && byFog(m.id);
+    row.appendChild(btn('Paint', m.erase ? 'small' : 'small primary', () => startBrush((f || data.fog.find((x) => x.active) || newFogArea()).id, false)));
+    row.appendChild(btn('Erase', m.erase ? 'small primary' : 'small', () => startBrush(m.id, true)));
+    b.appendChild(row);
+    const sf = el('div', 'field', 'Brush size');
+    sf.style.marginTop = '14px';
+    const sr = el('div', 'size-row');
+    const r = el('input');
+    r.type = 'range'; r.min = '10'; r.max = '160'; r.step = '5'; r.value = String(brushSize);
+    const out = el('span', 'size-val', brushSize + 'px');
+    r.oninput = () => { brushSize = +r.value; out.textContent = brushSize + 'px'; sizeCursor(); };
+    sr.appendChild(r); sr.appendChild(out); sf.appendChild(sr);
+    b.appendChild(sf);
+    b.appendChild(el('p', 'tip', 'Zoom in for finer detail; the brush is measured on screen. You can’t pan while the brush is on, so scroll to zoom and use Done to move around.'));
+    b.appendChild(btn('Done', 'primary', () => { const id = m.id; cancelMode(true); const ff = id && byFog(id); if (ff && !m.erase) showFogForm(ff); else showFog(); }));
+  }
+  function newFogArea() {
+    const f = { id: uid(), name: 'Fog ' + (data.fog.length + 1), active: true, shape: null };
+    data.fog.push(f);
+    return f;
+  }
+  function brushCursor() {
+    let c = $('#brush-cursor');
+    if (!c) { c = el('div'); c.id = 'brush-cursor'; map.getContainer().appendChild(c); }
+    return c;
+  }
+  function sizeCursor() {
+    const c = brushCursor();
+    c.style.width = c.style.height = brushSize * 2 + 'px';
+  }
+  function dab(pt) {
+    mode.last = pt;
+    const ring = [];
+    for (let k = 0; k < 20; k++) {
+      const a = (k / 20) * Math.PI * 2;
+      const ll = map.unproject([pt.x + brushSize * Math.cos(a), pt.y + brushSize * Math.sin(a)]);
+      ring.push([ll.lng, ll.lat]);
+    }
+    ring.push(ring[0]);
+    mode.stroke.push([ring]);
+  }
+  function previewStroke() {
+    if (!styleReady) return;
+    map.getSource('draft').setData({ type: 'FeatureCollection', features: mode.stroke.map((p) => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: p } })) });
+  }
+  function brushDown(e) {
+    if (!mode || mode.type !== 'brush') return;
+    if (e.originalEvent && e.originalEvent.button) return;
+    e.preventDefault();
+    mode.painting = true; mode.stroke = []; mode.last = null;
+    dab(e.point); previewStroke();
+  }
+  function brushMove(e) {
+    if (!mode || mode.type !== 'brush') return;
+    const c = brushCursor();
+    c.style.display = 'block';
+    c.style.left = e.point.x + 'px'; c.style.top = e.point.y + 'px';
+    c.classList.toggle('erase', !!mode.erase);
+    if (!mode.painting) return;
+    e.preventDefault();
+    const p = e.point, l = mode.last, step = Math.max(3, brushSize * 0.35);
+    const d = Math.hypot(p.x - l.x, p.y - l.y);
+    if (d < step) return;
+    const n = Math.ceil(d / step);
+    for (let i = 1; i <= n; i++) dab({ x: l.x + (p.x - l.x) * i / n, y: l.y + (p.y - l.y) * i / n });
+    previewStroke();
+  }
+  async function brushUp() {
+    if (!mode || mode.type !== 'brush' || !mode.painting) return;
+    const m = mode;
+    m.painting = false;
+    const stroke = m.stroke;
+    m.stroke = [];
+    if (!stroke.length) return;
+    try {
+      const pc = await loadClipper();
+      const paint = pc.union(...stroke);
+      const tidy = (s) => {
+        if (!s || !s.length) return null;
+        const outS = s.map((poly) => poly.map((ring) => ring.map((p) => [Math.round(p[0] * 1e5) / 1e5, Math.round(p[1] * 1e5) / 1e5])).filter((ring) => ring.length >= 4)).filter((poly) => poly.length);
+        return outS.length ? outS : null;
+      };
+      if (m.erase) {
+        data.fog.forEach((f) => { if (f.shape) f.shape = tidy(pc.difference(f.shape, paint)); });
+      } else {
+        let f = m.id && byFog(m.id);
+        if (!f) { f = newFogArea(); m.id = f.id; }
+        f.shape = tidy(f.shape ? pc.union(f.shape, paint) : paint);
+      }
+      renderAll(); changed();
+    } catch (e) {
+      toast('That brush stroke didn’t work: ' + e.message, 'warn');
+    } finally {
+      if (mode === m) { map.getSource('draft').setData({ type: 'FeatureCollection', features: [] }); }
+    }
   }
 
   // --- Quests ---
