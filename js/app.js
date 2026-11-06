@@ -219,7 +219,9 @@
       out.regions.push({
         id: str(r.id) || uid(), name: str(r.name), description: str(r.description),
         color: safeColor(r.color, '#9b6dff'), font: validFont(r.font, 'Cinzel'),
-        size: REGION_SIZES[r.size] ? r.size : 'l', coast: r.coast !== false, rough: r.rough !== false, points, shape: normShape(r.shape)
+        size: REGION_SIZES[r.size] ? r.size : 'l', coast: r.coast !== false, rough: r.rough !== false, points, shape: normShape(r.shape),
+        labelAt: Array.isArray(r.labelAt) && num(r.labelAt[0]) != null && num(r.labelAt[1]) != null ? [num(r.labelAt[0]), num(r.labelAt[1])] : null,
+        labelScale: clampScale(r.labelScale)
       });
     }
     for (const l of arr(d.locations)) {
@@ -336,7 +338,8 @@
     const at = layers.findIndex((l) => l.id === 'roads-minor');
     layers.splice(at, 0, { id: 'regions-fill', type: 'fill', source: 'regions', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.16 } });
     layers.push(
-      { id: 'fog-edge', type: 'line', source: 'fog', filter: ['==', ['get', 'active'], true], paint: { 'line-color': '#1c1c21', 'line-width': 30, 'line-blur': 24, 'line-opacity': 0.9 } },
+      { id: 'fog-haze', type: 'line', source: 'fog', filter: ['==', ['get', 'active'], true], paint: { 'line-color': '#1e1e24', 'line-width': 90, 'line-blur': 80, 'line-opacity': 0.55 } },
+      { id: 'fog-edge', type: 'line', source: 'fog', filter: ['==', ['get', 'active'], true], paint: { 'line-color': '#1c1c21', 'line-width': 34, 'line-blur': 28, 'line-opacity': 0.9 } },
       { id: 'fog-fill', type: 'fill', source: 'fog', filter: ['==', ['get', 'active'], true], paint: { 'fill-pattern': 'fog-tex', 'fill-opacity': 0.98 } },
       { id: 'fog-line', type: 'line', source: 'fog', layout: { visibility: 'none' }, paint: { 'line-color': '#c9c3b5', 'line-width': 1.5, 'line-dasharray': [2, 2], 'line-opacity': ['case', ['get', 'active'], 0.8, 0.4] } }
     );
@@ -347,7 +350,7 @@
       { id: 'draft-pts', type: 'circle', source: 'draft', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 5, 'circle-color': '#e8b04a', 'circle-stroke-color': '#000', 'circle-stroke-width': 1.5 } }
     );
     // Region outlines go under the fog; the drawing preview stays on top of everything.
-    const rl = layers.findIndex((l) => l.id === 'regions-line'), fe = layers.findIndex((l) => l.id === 'fog-edge');
+    const rl = layers.findIndex((l) => l.id === 'regions-line'), fe = layers.findIndex((l) => l.id === 'fog-haze');
     layers.splice(fe, 0, layers.splice(rl, 1)[0]);
     return { version: 8, sources: { base: source, regions: { type: 'geojson', data: empty }, fog: { type: 'geojson', data: empty }, draft: { type: 'geojson', data: empty } }, layers };
   }
@@ -484,9 +487,18 @@
       type: 'FeatureCollection',
       features: data.fog.filter((f) => f.shape).map((f) => ({ type: 'Feature', properties: { id: f.id, active: f.active }, geometry: { type: 'MultiPolygon', coordinates: f.shape } }))
     });
-    map.setPaintProperty('fog-fill', 'fill-opacity', editing ? 0.55 : 0.98);
-    map.setPaintProperty('fog-edge', 'line-opacity', editing ? 0 : 0.9);
-    map.setLayoutProperty('fog-line', 'visibility', editing ? 'visible' : 'none');
+    applyFogLook();
+  }
+  // Players see thick fog with soft edges; you see it see-through with an outline.
+  function applyFogLook() {
+    try {
+      map.setPaintProperty('fog-fill', 'fill-opacity', editing ? 0.55 : 0.98);
+      map.setPaintProperty('fog-edge', 'line-opacity', editing ? 0 : 0.9);
+      map.setPaintProperty('fog-haze', 'line-opacity', editing ? 0 : 0.55);
+      map.setLayoutProperty('fog-line', 'visibility', editing ? 'visible' : 'none');
+    } catch (e) {
+      map.once('idle', applyFogLook); // the map was busy; try again in a moment
+    }
   }
 
   function renderAll() {
@@ -748,8 +760,20 @@
       d.style.fontFamily = fontStack(r.font);
       d.style.color = r.color;
       const pos = regionLabelPos(r);
-      if (fogged(pos.pt[0], pos.pt[1])) return;
-      rlabels.set(r.id, new maplibregl.Marker({ element: d, anchor: 'center' }).setLngLat(pos.pt).addTo(map));
+      const at = r.labelAt || pos.pt;
+      if (fogged(at[0], at[1])) return;
+      const mk = new maplibregl.Marker({ element: d, anchor: 'center', draggable: editing }).setLngLat(at).addTo(map);
+      if (editing) {
+        d.title = 'Drag to move the name';
+        d.addEventListener('click', (e) => { e.stopPropagation(); selectRegion(r.id); });
+        mk.on('dragend', () => {
+          const p = mk.getLngLat();
+          r.labelAt = [round6(p.lng), round6(p.lat)];
+          changed();
+          if (currentView === 'region' && selectedId === r.id) showRegionForm(r);
+        });
+      }
+      rlabels.set(r.id, mk);
       labelMeta.set(r.id, { d, r, box: pos.box });
     });
     fitRegionLabels();
@@ -764,7 +788,7 @@
       const text = r.name.toUpperCase();
       measureCtx.font = `700 100px ${fontStack(r.font)}`;
       const per1 = measureCtx.measureText(text).width / 100 + 0.2 * text.length; // width per 1px of font size (incl. letter spacing)
-      const size = Math.min((w * 0.82) / per1, h * 0.42, REGION_SIZES[r.size]);
+      const size = Math.min((w * 0.82) / per1, h * 0.42, REGION_SIZES[r.size]) * (r.labelScale || 1);
       d.style.display = size < 7 ? 'none' : '';
       d.style.fontSize = Math.max(7, size).toFixed(1) + 'px';
     }
@@ -1718,7 +1742,13 @@
     row.appendChild(field('Label font', fontInput(r.font, null, (v) => { r.font = v; refresh(); })));
     row.appendChild(field('Biggest name size', selectInput([['m', 'Medium'], ['l', 'Large'], ['xl', 'Huge']], r.size, (v) => { r.size = v; refresh(); })));
     b.appendChild(row);
-    b.appendChild(el('p', 'tip', 'The name shrinks to fit inside the region and grows as you zoom in.'));
+    const ns = sizeField(r.labelScale, (v) => { r.labelScale = v; fitRegionLabels(); changed(); });
+    ns.firstChild.textContent = 'Name size';
+    ns.querySelector('input').min = '0.3';
+    ns.querySelector('input').max = '3';
+    b.appendChild(ns);
+    b.appendChild(el('p', 'tip', 'Drag the name on the map to place it anywhere. At 100% it fits inside the region; it grows as you zoom in.'));
+    if (r.labelAt) b.appendChild(btn('Put the name back in the middle', 'small', () => { r.labelAt = null; refresh(); showRegionForm(r); }));
     const cl = el('label', 'check');
     const cb = el('input');
     cb.type = 'checkbox';
@@ -1852,12 +1882,16 @@
     const c = brushCursor();
     c.style.width = c.style.height = brushSize * 2 + 'px';
   }
+  // Each dab is a lumpy, cloud-like blob (not a perfect circle), so strokes get billowy edges.
   function dab(pt) {
     mode.last = pt;
     const ring = [];
-    for (let k = 0; k < 20; k++) {
-      const a = (k / 20) * Math.PI * 2;
-      const ll = map.unproject([pt.x + brushSize * Math.cos(a), pt.y + brushSize * Math.sin(a)]);
+    const waves = [2, 3, 5, 7].map((k, i) => ({ k, amp: [0.13, 0.1, 0.07, 0.05][i] * (0.6 + Math.random() * 0.8), ph: Math.random() * Math.PI * 2 }));
+    const N = 28;
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      const rr = brushSize * (1 + waves.reduce((s, w) => s + w.amp * Math.sin(w.k * a + w.ph), 0));
+      const ll = map.unproject([pt.x + rr * Math.cos(a), pt.y + rr * Math.sin(a)]);
       ring.push([ll.lng, ll.lat]);
     }
     ring.push(ring[0]);

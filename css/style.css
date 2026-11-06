@@ -143,6 +143,9 @@ body.placing .maplibregl-canvas-container.maplibregl-interactive { cursor: cross
 .veil { position: fixed; inset: 0; z-index: 75; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .5); color: #fff; font: 600 15px var(--ui); }
 .veil[hidden] { display: none; }
 
+body.editing .region-label { pointer-events: auto; cursor: grab; }
+body.editing .region-label:hover { outline: 1px dashed rgba(255, 255, 255, .5); outline-offset: 4px; }
+
 /* Fog brush cursor */
 #brush-cursor { position: absolute; z-index: 4; display: none; width: 90px; height: 90px; transform: translate(-50%, -50%); border: 2px solid rgba(232, 176, 74, .9); border-radius: 50%; background: rgba(232, 176, 74, .12); pointer-events: none; }
 #brush-cursor.erase { border-color: rgba(255, 255, 255, .9); border-style: dashed; background: rgba(255, 255, 255, .08); }
