@@ -136,7 +136,88 @@ body.placing .maplibregl-canvas-container.maplibregl-interactive { cursor: cross
 .veil { position: fixed; inset: 0; z-index: 75; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .5); color: #fff; font: 600 15px var(--ui); }
 .veil[hidden] { display: none; }
 
+/* Settlement pins, quest markers, region labels */
+.pin-big { width: 36px; height: 48px; }
+.pin-label.always { opacity: 1; bottom: auto; top: calc(100% + 3px); font-size: 12.5px; letter-spacing: .04em; background: rgba(8, 8, 10, .8); }
+.qmarker { position: relative; width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 2px solid #1a1205; background: var(--accent); color: #1a1205; font: 900 17px/24px Georgia, serif; cursor: pointer; animation: qpulse 2.2s infinite; }
+.qmarker .pin-label { bottom: 34px; }
+.qmarker:hover .pin-label, .qmarker:focus-visible .pin-label { opacity: 1; }
+.qmarker.selected { transform-origin: center; outline: 2px solid #fff; outline-offset: 2px; }
+.qmarker.hidden-q { opacity: .5; animation: none; border-style: dashed; }
+.qmarker.closed { filter: grayscale(1); animation: none; }
+body.editing .qmarker { cursor: grab; }
+@keyframes qpulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(232, 176, 74, .4), 0 2px 8px rgba(0, 0, 0, .7); }
+  50% { box-shadow: 0 0 0 11px rgba(232, 176, 74, 0), 0 2px 8px rgba(0, 0, 0, .7); }
+}
+.region-label { pointer-events: none; white-space: nowrap; text-transform: uppercase; letter-spacing: .2em; font-weight: 700; text-shadow: 0 0 6px #000, 0 0 14px #000, 0 2px 2px #000; opacity: .9; transition: opacity .2s; }
+.zoomed-in .region-label { opacity: .25; }
+.pop-kicker { margin: 14px 44px 0 16px; font: 700 10.5px var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--pin, var(--accent)); }
+.pop-img + .pop-kicker { margin-right: 16px; }
+.pop-kicker + .pop-title { margin-top: 4px; }
+.pop-meta { margin: 0 16px 8px; font: 500 12.5px var(--ui); color: var(--muted); }
+.pop-actions { margin: 0 16px 16px; }
+
+/* Logbook button */
+#log-btn { position: fixed; top: 14px; right: 14px; z-index: 15; display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 10px; border: 1px solid #3a3a41; background: rgba(16, 16, 19, .92); color: var(--text); font: 600 14px var(--ui); cursor: pointer; box-shadow: 0 6px 20px rgba(0, 0, 0, .45); }
+#log-btn:hover { background: #222227; }
+#log-btn[hidden], body.editing #log-btn { display: none; }
+#log-badge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--accent); color: #1a1205; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; }
+#log-badge[hidden] { display: none; }
+
+/* Side sheets: settlement pages and the logbook */
+.sheet { position: fixed; top: 0; right: 0; bottom: 0; z-index: 25; width: min(430px, 100%); display: flex; flex-direction: column; background: var(--panel); border-left: 1px solid var(--line); box-shadow: 0 0 40px rgba(0, 0, 0, .6); }
+.sheet[hidden] { display: none; }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.sheet-title { font: 700 11px var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--pin, var(--accent)); }
+.sheet-close { width: 32px; height: 32px; border-radius: 50%; border: 1px solid #3a3a41; background: #1d1d22; color: #fff; font-size: 18px; line-height: 1; cursor: pointer; }
+.sheet-scroll { flex: 1; overflow-y: auto; }
+.page-hero { display: block; width: 100%; max-height: 240px; object-fit: cover; cursor: zoom-in; }
+.page-title { margin: 16px 18px 0; font-size: 30px; line-height: 1.15; color: #fbf6ea; }
+.tabs { display: flex; gap: 2px; padding: 0 10px; margin-top: 10px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tabs button { padding: 11px 10px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font: 600 13px var(--ui); white-space: nowrap; cursor: pointer; }
+.tabs button.on { color: var(--text); border-bottom-color: var(--pin, var(--accent)); }
+.tab-body { display: grid; gap: 12px; padding: 16px 18px 32px; }
+.prose { line-height: 1.6; color: #d9d4c8; overflow-wrap: anywhere; }
+.prose a { color: var(--pin, var(--accent)); }
+.card { overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: #18181c; }
+.card-img { display: block; width: 100%; max-height: 220px; object-fit: cover; cursor: zoom-in; }
+.card-body { display: grid; gap: 7px; padding: 12px 14px; min-width: 0; }
+.card h4 { margin: 0; font-size: 1.2em; color: #fbf6ea; }
+.card .btn { justify-self: start; }
+.meta { font: 500 12.5px var(--ui); color: var(--muted); }
+.items { width: 100%; border-collapse: collapse; font: 14px var(--ui); }
+.items td { padding: 6px 0; border-top: 1px solid #27272c; }
+.items td:last-child { padding-left: 12px; text-align: right; white-space: nowrap; color: var(--accent); }
+.npc { display: flex; align-items: flex-start; }
+.npc-img { flex: none; width: 68px; height: 68px; margin: 12px 0 12px 14px; border-radius: 50%; object-fit: cover; border: 1px solid #333; cursor: zoom-in; }
+.chips { display: flex; gap: 6px; }
+.chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font: 700 10.5px var(--ui); letter-spacing: .06em; text-transform: uppercase; background: #2a2a30; color: #cfc9bb; white-space: nowrap; }
+.chip.active { background: rgba(232, 176, 74, .18); color: var(--accent); }
+.chip.done { background: rgba(63, 191, 127, .16); color: #6fd6a0; }
+.chip.failed { background: rgba(214, 69, 69, .16); color: #ff8c8c; }
+.chip.new { background: var(--accent); color: #1a1205; }
+.chip.hidden { background: #303036; color: #9b978d; }
+.chip.settle { background: rgba(74, 144, 226, .16); color: #8fbaf0; }
+.group-title { margin-top: 6px; font: 700 12px var(--ui); letter-spacing: .1em; text-transform: uppercase; color: #c9c3b5; }
+.empty { margin: 0; color: var(--muted); line-height: 1.5; }
+.notes { width: 100%; min-height: 50vh; padding: 12px; resize: vertical; border: 1px solid #34343b; border-radius: 10px; background: #0d0d10; color: var(--text); font: 15px/1.55 var(--ui); }
+.notes:focus { outline: none; border-color: var(--accent); }
+.toast.quest { border-color: var(--accent); background: #241d10; font-size: 14px; cursor: pointer; }
+
+/* Editor extras */
+.list-add { width: 100%; margin-bottom: 12px; }
+.pin-list .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub-h { margin: 22px 0 8px; padding-top: 14px; border-top: 1px solid var(--line); font: 700 12px var(--ui); letter-spacing: .08em; text-transform: uppercase; color: #c9c3b5; }
+.card-edit { margin-bottom: 8px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: #16161a; }
+.card-edit summary { padding: 10px 0; color: var(--text); font-weight: 600; font-size: 13px; cursor: pointer; }
+.card-edit[open] { padding-bottom: 12px; }
+.reveal-box { display: grid; gap: 10px; margin-bottom: 16px; padding: 12px; border: 1px dashed #4a4a52; border-radius: 10px; color: var(--muted); font-size: 13px; }
+.reveal-box.on { border: 1px solid #2f6b4c; color: #8fdcb2; }
+.reveal-box .btn { justify-self: start; }
+
 @media (max-width: 700px) {
   body.editing #map { right: 0; bottom: 56vh; }
   .editor { top: auto; left: 0; width: auto; height: 56vh; border-left: 0; border-top: 1px solid var(--line); }
+  .sheet { top: auto; height: 78vh; border-left: 0; border-top: 1px solid var(--line); border-radius: 14px 14px 0 0; }
 }
