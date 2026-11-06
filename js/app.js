@@ -29,7 +29,38 @@
     ['Oswald', true, 'sans-serif']
   ].map(([name, bold, fallback]) => ({ name, bold, fallback }));
   const SIZES = { s: 14, m: 16, l: 19 };
-  const REGION_SIZES = { m: 18, l: 26, xl: 36 };
+  const REGION_SIZES = { m: 22, l: 34, xl: 52 }; // biggest a region name may get
+  // Symbols drawn inside pins (24x24 icons).
+  const SYMBOLS = {
+    dot: ['Dot', 'M12 4a8 8 0 1 1-.01 0z'],
+    castle: ['Castle', 'M3 21V9h3v2h2V9h2v2h4V9h2v2h2V9h3v12h-7v-4a2 2 0 0 0-4 0v4z'],
+    tower: ['Tower', 'M7 21V9H5V3h3v2h2V3h4v2h2V3h3v6h-2v12zm4-8v3h2v-3z'],
+    house: ['House', 'M2 11.5 12 3l10 8.5h-3V21h-5v-6h-4v6H5v-9.5z'],
+    tent: ['Camp', 'M12 3 1 21h8l3-6 3 6h8z'],
+    tavern: ['Tavern', 'M4 5h12v3h2a3 3 0 0 1 3 3v4a3 3 0 0 1-3 3h-2v3H4zm12 5v6h2a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1z'],
+    shop: ['Shop', 'M9 2h6l-2 3.2A7.5 7.5 0 0 1 19.5 13c0 5-3.3 9-7.5 9s-7.5-4-7.5-9A7.5 7.5 0 0 1 11 5.2z'],
+    temple: ['Temple', 'M12 1 2 7h20zM4 9h3v9H4zm6.5 0h3v9h-3zM17 9h3v9h-3zM2 19h20v3H2z'],
+    skull: ['Skull', 'M12 2a8.5 8.5 0 0 0-8.5 8.5c0 3 1.4 5.3 3.5 6.6V21h10v-3.9c2.1-1.3 3.5-3.6 3.5-6.6A8.5 8.5 0 0 0 12 2zM6.8 11a2.2 2.2 0 1 0 4.4 0 2.2 2.2 0 1 0-4.4 0zm6 0a2.2 2.2 0 1 0 4.4 0 2.2 2.2 0 1 0-4.4 0z'],
+    swords: ['Battle', 'M3 2h4l9 9-2 2-9-9zm18 0h-4l-9 9 2 2 9-9zM5 15l4 4-2 2-1-1-2 2-1-1 2-2-1-1zm14 0-4 4 2 2 1-1 2 2 1-1-2-2 1-1z'],
+    shield: ['Fort', 'M12 2 3.5 5v6.5c0 5.2 3.6 9.3 8.5 10.5 4.9-1.2 8.5-5.3 8.5-10.5V5z'],
+    crown: ['Capital', 'M2 7l5.5 4.5L12 4l4.5 7.5L22 7l-2.5 12h-15z'],
+    anchor: ['Harbor', 'M12 2a2.5 2.5 0 0 1 1 4.8V8h3v2h-3v9a6 6 0 0 0 5.5-5H16l3.5-4.5L23 14h-2.5A8.5 8.5 0 0 1 3.5 14H1l3.5-4.5L8 14H5.5A6 6 0 0 0 11 19v-9H8V8h3V6.8A2.5 2.5 0 0 1 12 2z'],
+    ship: ['Ship', 'M2 15h20l-3.5 6h-13zM11 2h2v12h-2zm3 2 6 9h-6zm-4 1-5 8h5z'],
+    tree: ['Forest', 'M12 1 5 11h4l-4 6h6v5h2v-5h6l-4-6h4z'],
+    mountain: ['Mountain', 'M1 21 9 7l4 6.5 3-4.5 7 12z'],
+    cave: ['Cave', 'M1 21C1 11 6 4 12 4s11 7 11 17h-7c0-4-1.8-7-4-7s-4 3-4 7z'],
+    fire: ['Campfire', 'M12 1c3.5 4.5 6 7 6 10.5a6 6 0 0 1-12 0c0-2.3 1.2-3.8 2.5-5 0 2.3 1 3.5 2.3 3.5 0-3.5-1-6 1.2-9zM3 19.5l18-2.5v2L3 22zm18 0L3 17v2l18 3z'],
+    star: ['Star', 'M12 2l3 6.9 7.5.6-5.7 4.9 1.8 7.4L12 17.8 5.4 21.8l1.8-7.4L1.5 9.5 9 8.9z'],
+    flag: ['Flag', 'M5 2h2v20H5zm3 1h12l-3 4.5 3 4.5H8z'],
+    key: ['Key', 'M7.5 7a5 5 0 1 0 4.6 7H15v2.5h2.5V14h2v2.5H22V10h-9.9A5 5 0 0 0 7.5 7zm0 3a2 2 0 1 1 0 4 2 2 0 0 1 0-4z'],
+    gem: ['Treasure', 'M6 3h12l5 6.5L12 22 1 9.5z'],
+    potion: ['Potion', 'M9 2h6v2h-1v4.6c3.2 1 5.5 3.8 5.5 7A7.5 7.5 0 0 1 4.5 15.6c0-3.2 2.3-6 5.5-7V4H9z'],
+    book: ['Library', 'M3 4c3.2-1.2 6.5-1 9 1 2.5-2 5.8-2.2 9-1v16c-3.2-1.2-6.5-1-9 1-2.5-2-5.8-2.2-9-1z'],
+    eye: ['Mystery', 'M12 5C5.5 5 1 12 1 12s4.5 7 11 7 11-7 11-7-4.5-7-11-7zm0 3.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7z'],
+    portal: ['Portal', 'M12 2c4.4 0 7 4.5 7 10s-2.6 10-7 10-7-4.5-7-10 2.6-10 7-10zm0 3c-2.4 0-4 3.1-4 7s1.6 7 4 7 4-3.1 4-7-1.6-7-4-7z']
+  };
+  const SYMBOL_COLORS = ['#141414', '#ffffff', ...PIN_COLORS];
+  const clampScale = (v) => { const n = num(v); return n == null ? 1 : Math.min(3, Math.max(0.4, n)); };
   const QUEST_STATUS = { active: 'Active', done: 'Completed', failed: 'Failed' };
   const DEFAULTS = { titleFont: 'Cinzel', bodyFont: 'Spectral', textSize: 'm', color: '#e8b04a' };
   const SITE_KEY = location.pathname.replace(/[^\w]/g, '_') || 'root';
@@ -178,7 +209,8 @@
       },
       regions: [],
       locations: [],
-      quests: []
+      quests: [],
+      fog: []
     };
     for (const r of arr(d.regions)) {
       if (!r) continue;
@@ -187,7 +219,7 @@
       out.regions.push({
         id: str(r.id) || uid(), name: str(r.name), description: str(r.description),
         color: safeColor(r.color, '#9b6dff'), font: validFont(r.font, 'Cinzel'),
-        size: REGION_SIZES[r.size] ? r.size : 'l', points
+        size: REGION_SIZES[r.size] ? r.size : 'l', coast: r.coast !== false, points, shape: normShape(r.shape)
       });
     }
     for (const l of arr(d.locations)) {
@@ -200,6 +232,7 @@
         titleFont: validFont(l.titleFont, ''), bodyFont: validFont(l.bodyFont, ''),
         textSize: SIZES[l.textSize] ? l.textSize : '',
         color: safeColor(l.color, ''), image: safeImageSrc(l.image),
+        symbol: SYMBOLS[l.symbol] ? l.symbol : '', symbolColor: safeColor(l.symbolColor, ''), scale: clampScale(l.scale),
         shops: arr(l.shops).filter(Boolean).map((s) => ({
           id: str(s.id) || uid(), name: str(s.name), keeper: str(s.keeper), description: str(s.description),
           items: str(s.items), image: safeImageSrc(s.image)
@@ -215,10 +248,32 @@
       out.quests.push({
         id: str(q.id) || uid(), title: str(q.title), description: str(q.description),
         status: QUEST_STATUS[q.status] ? q.status : 'active', giver: str(q.giver), locationId: str(q.locationId),
-        lng: num(q.lng), lat: num(q.lat), revealed: !!q.revealed
+        lng: num(q.lng), lat: num(q.lat), revealed: !!q.revealed, scale: clampScale(q.scale)
       });
     }
+    for (const f of arr(d.fog)) {
+      if (!f) continue;
+      const points = arr(f.points).filter((p) => Array.isArray(p) && num(p[0]) != null && num(p[1]) != null).map((p) => [num(p[0]), num(p[1])]);
+      if (points.length < 3) continue;
+      out.fog.push({ id: str(f.id) || uid(), name: str(f.name), active: f.active !== false, points });
+    }
     return out;
+  }
+  // A region's coast-traced outline: [polygon[ring[[lng,lat]...]]], or null.
+  function normShape(s) {
+    if (!Array.isArray(s)) return null;
+    const out = [];
+    for (const poly of s) {
+      if (!Array.isArray(poly)) continue;
+      const rings = [];
+      for (const ring of poly) {
+        if (!Array.isArray(ring)) continue;
+        const pts = ring.filter((p) => Array.isArray(p) && num(p[0]) != null && num(p[1]) != null).map((p) => [num(p[0]), num(p[1])]);
+        if (pts.length >= 4) rings.push(pts);
+      }
+      if (rings.length) out.push(rings);
+    }
+    return out.length ? out : null;
   }
 
   function serialize(d) {
@@ -280,12 +335,20 @@
     const at = layers.findIndex((l) => l.id === 'roads-minor');
     layers.splice(at, 0, { id: 'regions-fill', type: 'fill', source: 'regions', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.16 } });
     layers.push(
+      { id: 'fog-edge', type: 'line', source: 'fog', filter: ['==', ['get', 'active'], true], paint: { 'line-color': '#1c1c21', 'line-width': 30, 'line-blur': 24, 'line-opacity': 0.9 } },
+      { id: 'fog-fill', type: 'fill', source: 'fog', filter: ['==', ['get', 'active'], true], paint: { 'fill-pattern': 'fog-tex', 'fill-opacity': 0.98 } },
+      { id: 'fog-line', type: 'line', source: 'fog', layout: { visibility: 'none' }, paint: { 'line-color': '#c9c3b5', 'line-width': 1.5, 'line-dasharray': [2, 2], 'line-opacity': ['case', ['get', 'active'], 0.8, 0.4] } }
+    );
+    layers.push(
       { id: 'regions-line', type: 'line', source: 'regions', paint: { 'line-color': ['get', 'color'], 'line-width': 1.8, 'line-opacity': 0.85, 'line-dasharray': [3, 2] } },
       { id: 'draft-fill', type: 'fill', source: 'draft', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': '#e8b04a', 'fill-opacity': 0.14 } },
       { id: 'draft-line', type: 'line', source: 'draft', filter: ['==', ['geometry-type'], 'LineString'], paint: { 'line-color': '#e8b04a', 'line-width': 2 } },
       { id: 'draft-pts', type: 'circle', source: 'draft', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 5, 'circle-color': '#e8b04a', 'circle-stroke-color': '#000', 'circle-stroke-width': 1.5 } }
     );
-    return { version: 8, sources: { base: source, regions: { type: 'geojson', data: empty }, draft: { type: 'geojson', data: empty } }, layers };
+    // Region outlines go under the fog; the drawing preview stays on top of everything.
+    const rl = layers.findIndex((l) => l.id === 'regions-line'), fe = layers.findIndex((l) => l.id === 'fog-edge');
+    layers.splice(fe, 0, layers.splice(rl, 1)[0]);
+    return { version: 8, sources: { base: source, regions: { type: 'geojson', data: empty }, fog: { type: 'geojson', data: empty }, draft: { type: 'geojson', data: empty } }, layers };
   }
 
   // ===== App state =====
@@ -300,6 +363,7 @@
   const byId = (id) => data.locations.find((l) => l.id === id);
   const byQuest = (id) => data.quests.find((q) => q.id === id);
   const byRegion = (id) => data.regions.find((r) => r.id === id);
+  const byFog = (id) => data.fog.find((f) => f.id === id);
   const visibleQuests = (d) => d.quests.filter((q) => q.revealed);
   const npcsFor = (loc) => loc.npcs.filter((n) => editing || !n.hidden);
   const questsFor = (loc) => data.quests.filter((q) => q.locationId === loc.id && (editing || q.revealed));
@@ -325,11 +389,16 @@
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
     popup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, maxWidth: 'none', className: 'loc-popup', focusAfterOpen: false });
     popup.on('close', () => { popupKey = null; highlight(null); });
-    map.on('load', () => { styleReady = true; fitSize(); renderRegions(); });
+    map.on('load', () => { styleReady = true; fitSize(); renderFog(); renderRegions(); });
+    map.on('styleimagemissing', (e) => { if (e.id === 'fog-tex' && !map.hasImage('fog-tex')) map.addImage('fog-tex', fogTexture()); });
+    if (window.ResizeObserver) new ResizeObserver(() => fitSize()).observe(map.getContainer());
+    lockZoom();
     window.addEventListener('resize', fitSize);
     map.on('click', onMapClick);
     map.on('dblclick', (e) => { if (mode && mode.type === 'region') { e.preventDefault(); finishRegion(); } });
-    map.on('zoom', () => map.getContainer().classList.toggle('zoomed-in', map.getZoom() > 13.5));
+    map.on('zoom', fitRegionLabels);
+    map.on('resize', () => { lockZoom(); fitRegionLabels(); });
+    if (document.fonts) document.fonts.addEventListener('loadingdone', fitRegionLabels);
     map.on('mousemove', (e) => {
       if (!styleReady || mode) return;
       const hit = map.queryRenderedFeatures(e.point, { layers: ['regions-fill'] }).length > 0;
@@ -352,18 +421,69 @@
   }
 
   // If the page was opened in a hidden tab, the map can start at a tiny default size: fix it.
-  let firstFit = true;
   function fitSize() {
     if (!map) return;
     const c = map.getContainer(), cv = map.getCanvas();
-    if (Math.abs(c.clientWidth - cv.clientWidth) > 2 || Math.abs(c.clientHeight - cv.clientHeight) > 2) {
-      map.resize();
-      if (firstFit) map.fitBounds(LOCK_BOUNDS, { animate: false });
+    if (Math.abs(c.clientWidth - cv.clientWidth) > 2 || Math.abs(c.clientHeight - cv.clientHeight) > 2) map.resize();
+    lockZoom();
+  }
+  // Never let anyone zoom out past the area from your screenshot, whatever their screen size.
+  function lockZoom() {
+    const c = map.getContainer();
+    if (!c.clientWidth || !c.clientHeight) return;
+    const a = maplibregl.MercatorCoordinate.fromLngLat(LOCK_BOUNDS[0]), b = maplibregl.MercatorCoordinate.fromLngLat(LOCK_BOUNDS[1]);
+    const zw = Math.log2(c.clientWidth / (512 * Math.abs(b.x - a.x)));
+    const zh = Math.log2(c.clientHeight / (512 * Math.abs(b.y - a.y)));
+    map.setMinZoom(Math.max(zw, zh));
+  }
+
+  // ===== Fog of war =====
+  // A soft, smoky texture (made on the fly) so fog stands out from the dark map.
+  function fogTexture() {
+    const S = 256, c = document.createElement('canvas');
+    c.width = c.height = S;
+    const g = c.getContext('2d');
+    g.fillStyle = '#18181c';
+    g.fillRect(0, 0, S, S);
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    for (let i = 0; i < 70; i++) {
+      const x = rnd() * S, y = rnd() * S, r = 20 + rnd() * 80, a = 0.025 + rnd() * 0.05;
+      for (const dx of [-S, 0, S]) for (const dy of [-S, 0, S]) {
+        const grd = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
+        grd.addColorStop(0, `rgba(190,190,205,${a})`);
+        grd.addColorStop(1, 'rgba(190,190,205,0)');
+        g.fillStyle = grd;
+        g.fillRect(x + dx - r, y + dy - r, r * 2, r * 2);
+      }
     }
-    if (c.clientWidth > 0) firstFit = false;
+    const img = g.getImageData(0, 0, S, S);
+    return { width: S, height: S, data: new Uint8Array(img.data.buffer) };
+  }
+  const activeFog = () => data.fog.filter((f) => f.active);
+  function inRing(ring, x, y) {
+    let c = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i], [xj, yj] = ring[j];
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
+    }
+    return c;
+  }
+  // Is this spot hidden from players?
+  const fogged = (lng, lat) => !editing && activeFog().some((f) => inRing(f.points, lng, lat));
+  function renderFog() {
+    if (!styleReady) return;
+    map.getSource('fog').setData({
+      type: 'FeatureCollection',
+      features: data.fog.map((f) => ({ type: 'Feature', properties: { id: f.id, active: f.active }, geometry: { type: 'Polygon', coordinates: [[...f.points, f.points[0]]] } }))
+    });
+    map.setPaintProperty('fog-fill', 'fill-opacity', editing ? 0.55 : 0.98);
+    map.setPaintProperty('fog-edge', 'line-opacity', editing ? 0 : 0.9);
+    map.setLayoutProperty('fog-line', 'visibility', editing ? 'visible' : 'none');
   }
 
   function renderAll() {
+    renderFog();
     renderMarkers();
     renderQuestMarkers();
     renderRegions();
@@ -422,24 +542,34 @@
   }
 
   // ===== Pins (places & settlements) =====
-  function pinSvg(color, big) {
-    const inner = big
-      ? '<path d="M9.5 20v-8.5h2.4v2.2h2v-2.2h2.2v2.2h2v-2.2h2.4V20z" fill="rgba(0,0,0,.6)"/>'
-      : '<circle cx="15" cy="14.6" r="5" fill="rgba(0,0,0,.5)"/>';
-    return `<svg viewBox="0 0 30 40" width="${big ? 36 : 30}" height="${big ? 48 : 40}" aria-hidden="true">` +
+  const symbolOf = (loc) => (SYMBOLS[loc.symbol] ? loc.symbol : (loc.kind === 'settlement' ? 'castle' : 'dot'));
+  const symbolSvg = (key, size, color) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true"><path d="${SYMBOLS[key][1]}" fill="${color}" fill-rule="evenodd"/></svg>`;
+  const pinSize = (loc) => { const s = loc.scale || 1, big = loc.kind === 'settlement'; return [Math.round((big ? 36 : 30) * s), Math.round((big ? 48 : 40) * s)]; };
+  function pinSvg(color, sym, symColor, w, h) {
+    return `<svg viewBox="0 0 30 40" width="${w}" height="${h}" aria-hidden="true">` +
       `<path d="M15 1.5C7.5 1.5 1.5 7.4 1.5 14.8 1.5 24.8 15 38.5 15 38.5S28.5 24.8 28.5 14.8C28.5 7.4 22.5 1.5 15 1.5z" fill="${color}" stroke="rgba(0,0,0,.6)" stroke-width="1.5"/>` +
-      inner + '</svg>';
+      `<g transform="translate(7.2 6.8) scale(.65)"><path d="${SYMBOLS[sym][1]}" fill="${symColor}" fill-rule="evenodd"/></g></svg>`;
   }
 
   function addMarker(loc) {
     const big = loc.kind === 'settlement';
+    const [w, h] = pinSize(loc);
     const b = el('button', 'pin' + (big ? ' pin-big' : ''));
     b.type = 'button';
     b.dataset.key = 'loc:' + loc.id;
+    b.style.width = w + 'px';
+    b.style.height = h + 'px';
     b.setAttribute('aria-label', loc.name || 'Untitled place');
-    b.innerHTML = pinSvg(safeColor(loc.color || data.defaults.color), big);
+    b.innerHTML = pinSvg(safeColor(loc.color || data.defaults.color), symbolOf(loc), safeColor(loc.symbolColor, '#141414'), w, h);
     const label = el('span', 'pin-label' + (big ? ' always' : ''), loc.name || 'Untitled place');
-    if (big) { const f = loc.titleFont || data.defaults.titleFont; loadFont(f); label.style.fontFamily = fontStack(f); }
+    if (big) {
+      const f = loc.titleFont || data.defaults.titleFont;
+      loadFont(f);
+      label.style.fontFamily = fontStack(f);
+      label.style.fontSize = Math.round(Math.min(20, Math.max(10, 12.5 * (loc.scale || 1)))) + 'px';
+    } else {
+      label.style.bottom = (h + 6) + 'px';
+    }
     b.appendChild(label);
     b.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -461,7 +591,7 @@
   function renderMarkers() {
     for (const m of markers.values()) m.remove();
     markers.clear();
-    data.locations.forEach(addMarker);
+    data.locations.filter((l) => !fogged(l.lng, l.lat)).forEach(addMarker);
     highlight(popupKey || (pageLocId ? 'loc:' + pageLocId : null));
   }
   function highlight(key) {
@@ -472,12 +602,16 @@
   function renderQuestMarkers() {
     for (const m of qmarkers.values()) m.remove();
     qmarkers.clear();
-    data.quests.filter((q) => q.lng != null && q.lat != null && (editing || (q.revealed && q.status === 'active'))).forEach((q) => {
+    data.quests.filter((q) => q.lng != null && q.lat != null && (editing || (q.revealed && q.status === 'active')) && !fogged(q.lng, q.lat)).forEach((q) => {
       const b = el('button', 'qmarker' + (q.revealed ? '' : ' hidden-q') + (q.status !== 'active' ? ' closed' : ''), '!');
       b.type = 'button';
       b.dataset.key = 'quest:' + q.id;
+      const d = Math.round(28 * (q.scale || 1));
+      Object.assign(b.style, { width: d + 'px', height: d + 'px', fontSize: Math.round(17 * (q.scale || 1)) + 'px', lineHeight: (d - 4) + 'px' });
       b.setAttribute('aria-label', 'Quest: ' + (q.title || 'Untitled quest'));
-      b.appendChild(el('span', 'pin-label', q.title || 'Untitled quest'));
+      const ql = el('span', 'pin-label', q.title || 'Untitled quest');
+      ql.style.bottom = (d + 6) + 'px';
+      b.appendChild(ql);
       b.addEventListener('click', (e) => { e.stopPropagation(); if (editing) selectQuest(q.id); else openQuestPopup(q); });
       const m = new maplibregl.Marker({ element: b, anchor: 'center', draggable: editing }).setLngLat([q.lng, q.lat]).addTo(map);
       m.on('dragend', () => { const p = m.getLngLat(); q.lng = round6(p.lng); q.lat = round6(p.lat); changed(); });
@@ -496,14 +630,70 @@
     if (Math.abs(a) < 1e-12) return pts.reduce((s, p) => [s[0] + p[0] / pts.length, s[1] + p[1] / pts.length], [0, 0]);
     return [x / (3 * a), y / (3 * a)];
   }
+  const regionPolys = (r) => (r.shape ? r.shape : [[[...r.points, r.points[0]]]]);
+  const regionGeom = (r) => (r.shape ? { type: 'MultiPolygon', coordinates: r.shape } : { type: 'Polygon', coordinates: [[...r.points, r.points[0]]] });
+  function ringArea(ring) {
+    let a = 0;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) a += (ring[j][0] + ring[i][0]) * (ring[j][1] - ring[i][1]);
+    return Math.abs(a / 2);
+  }
+  function ringBox(ring) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of ring) { if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
+    return [x0, y0, x1, y1];
+  }
+  // The roomiest spot inside the biggest piece of the region (so the name sits on land, not in a bay).
+  function labelPoint(poly) {
+    const [x0, y0, x1, y1] = ringBox(poly[0]);
+    const k = Math.cos((y0 + y1) / 2 * Math.PI / 180);
+    const inside = (x, y) => {
+      let c = false;
+      for (const r of poly) for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+        const [xi, yi] = r[i], [xj, yj] = r[j];
+        if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
+      }
+      return c;
+    };
+    const edgeDist = (x, y) => {
+      let d = Infinity;
+      for (const r of poly) for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+        const ax = r[j][0] * k, ay = r[j][1], bx = r[i][0] * k, by = r[i][1], px = x * k;
+        const dx = bx - ax, dy = by - ay, len = dx * dx + dy * dy;
+        const t = len ? Math.max(0, Math.min(1, ((px - ax) * dx + (y - ay) * dy) / len)) : 0;
+        d = Math.min(d, Math.hypot(px - ax - t * dx, y - ay - t * dy));
+      }
+      return d;
+    };
+    let best = null, bestD = -1;
+    const N = 22;
+    for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
+      const x = x0 + (x1 - x0) * i / N, y = y0 + (y1 - y0) * j / N;
+      if (!inside(x, y)) continue;
+      const d = edgeDist(x, y);
+      if (d > bestD) { bestD = d; best = [x, y]; }
+    }
+    return best || centroid(poly[0].slice(0, -1));
+  }
+  const labelCache = new Map();
+  function regionLabelPos(r) {
+    const key = JSON.stringify(r.shape || r.points);
+    const hit = labelCache.get(r.id);
+    if (hit && hit.key === key) return hit;
+    const poly = regionPolys(r).reduce((a, b) => (ringArea(b[0]) > ringArea(a[0]) ? b : a));
+    const v = { key, pt: labelPoint(poly), box: ringBox(poly[0]) };
+    labelCache.set(r.id, v);
+    return v;
+  }
+  const labelMeta = new Map();
   function renderRegions() {
     for (const m of rlabels.values()) m.remove();
     rlabels.clear();
+    labelMeta.clear();
     const list = data.regions.filter((r) => r.points.length >= 3);
     if (styleReady) {
       map.getSource('regions').setData({
         type: 'FeatureCollection',
-        features: list.map((r) => ({ type: 'Feature', properties: { id: r.id, color: r.color }, geometry: { type: 'Polygon', coordinates: [[...r.points, r.points[0]]] } }))
+        features: list.map((r) => ({ type: 'Feature', properties: { id: r.id, color: r.color }, geometry: regionGeom(r) }))
       });
     }
     list.forEach((r) => {
@@ -511,10 +701,28 @@
       loadFont(r.font);
       const d = el('div', 'region-label', r.name);
       d.style.fontFamily = fontStack(r.font);
-      d.style.fontSize = REGION_SIZES[r.size] + 'px';
       d.style.color = r.color;
-      rlabels.set(r.id, new maplibregl.Marker({ element: d, anchor: 'center' }).setLngLat(centroid(r.points)).addTo(map));
+      const pos = regionLabelPos(r);
+      if (fogged(pos.pt[0], pos.pt[1])) return;
+      rlabels.set(r.id, new maplibregl.Marker({ element: d, anchor: 'center' }).setLngLat(pos.pt).addTo(map));
+      labelMeta.set(r.id, { d, r, box: pos.box });
     });
+    fitRegionLabels();
+  }
+  // Size each region's name to fit inside the region at the current zoom.
+  const measureCtx = document.createElement('canvas').getContext('2d');
+  function fitRegionLabels() {
+    if (!map) return;
+    for (const { d, r, box } of labelMeta.values()) {
+      const a = map.project([box[0], box[3]]), b = map.project([box[2], box[1]]);
+      const w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y);
+      const text = r.name.toUpperCase();
+      measureCtx.font = `700 100px ${fontStack(r.font)}`;
+      const per1 = measureCtx.measureText(text).width / 100 + 0.2 * text.length; // width per 1px of font size (incl. letter spacing)
+      const size = Math.min((w * 0.82) / per1, h * 0.42, REGION_SIZES[r.size]);
+      d.style.display = size < 7 ? 'none' : '';
+      d.style.fontSize = Math.max(7, size).toFixed(1) + 'px';
+    }
   }
 
   // ===== Pop-ups =====
@@ -572,7 +780,7 @@
       title: loc.name || 'Untitled place', kicker: loc.kind === 'settlement' ? 'Settlement' : '',
       titleFont: loc.titleFont || d.titleFont, bodyFont: loc.bodyFont || d.bodyFont,
       color: loc.color || d.color, size: loc.textSize || d.textSize, image: loc.image, description: loc.description, extra
-    }), loc.kind === 'settlement' ? 50 : 42);
+    }), pinSize(loc)[1] + 2);
   }
   function questMeta(q) {
     const bits = [QUEST_STATUS[q.status]];
@@ -587,7 +795,7 @@
       kicker: 'Quest', title: q.title || 'Untitled quest', meta: questMeta(q),
       titleFont: data.defaults.titleFont, bodyFont: data.defaults.bodyFont, color: DEFAULTS.color,
       size: data.defaults.textSize, description: q.description
-    }), 18);
+    }), Math.round(14 * (q.scale || 1)) + 4);
   }
   function openRegionPopup(r, lngLat) {
     showPopup('region:' + r.id, lngLat, card({
@@ -612,6 +820,7 @@
     const t = e.originalEvent && e.originalEvent.target;
     if (t && t.closest && (t.closest('.pin') || t.closest('.qmarker') || t.closest('.maplibregl-popup'))) return;
     if (editing && mode) { handleModeClick(e.lngLat); return; }
+    if (fogged(e.lngLat.lng, e.lngLat.lat)) { popup.remove(); return; }
     const hit = styleReady && map.queryRenderedFeatures(e.point, { layers: ['regions-fill'] })[0];
     const region = hit && byRegion(hit.properties.id);
     if (region) {
@@ -837,7 +1046,7 @@
   const PANEL_HTML = `
     <div class="ed-head"><div class="ed-title">Map editor</div><div class="ed-status" id="ed-status"></div></div>
     <div class="ed-actions"><button type="button" class="btn accent" id="ed-publish">Publish</button></div>
-    <div class="ed-tabs"><button type="button" data-tab="list">Pins</button><button type="button" data-tab="regions">Regions</button><button type="button" data-tab="quests">Quests</button><button type="button" data-tab="settings">Settings</button></div>
+    <div class="ed-tabs"><button type="button" data-tab="list">Pins</button><button type="button" data-tab="regions">Regions</button><button type="button" data-tab="quests">Quests</button><button type="button" data-tab="fog">Fog</button><button type="button" data-tab="settings">Settings</button></div>
     <div class="ed-body" id="ed-body"></div>
     <div class="ed-foot"><span class="muted small">Only you can publish changes.</span>
       <button type="button" class="btn ghost small" id="ed-exit">Exit editor</button></div>`;
@@ -952,6 +1161,7 @@
   function showTab(tab) {
     if (tab === 'regions') showRegions();
     else if (tab === 'quests') showQuests();
+    else if (tab === 'fog') showFog();
     else if (tab === 'settings') showSettings();
     else showList();
   }
@@ -959,12 +1169,15 @@
     popup.remove();
     if (currentView === 'quest') showQuests();
     else if (currentView === 'region') showRegions();
+    else if (currentView === 'fogarea') showFog();
     else showList();
   }
   function refreshView() {
     if (currentView === 'pin' && byId(selectedId)) selectPin(selectedId);
     else if (currentView === 'quest' && byQuest(selectedId)) showQuestForm(byQuest(selectedId));
     else if (currentView === 'region' && byRegion(selectedId)) showRegionForm(byRegion(selectedId));
+    else if (currentView === 'fogarea' && byFog(selectedId)) showFogForm(byFog(selectedId));
+    else if (currentView === 'fog' || currentView === 'fogarea') showFog();
     else if (currentView === 'settings') showSettings();
     else if (currentView === 'regions' || currentView === 'region') showRegions();
     else if (currentView === 'quests' || currentView === 'quest') showQuests();
@@ -990,6 +1203,7 @@
     updateDraft();
     if (silent) return;
     if (m.type === 'quest' && byQuest(m.id)) showQuestForm(byQuest(m.id));
+    else if (m.target === 'fog') { if (m.editId && byFog(m.editId)) showFogForm(byFog(m.editId)); else showFog(); }
     else if (m.type === 'region' && m.editId && byRegion(m.editId)) showRegionForm(byRegion(m.editId));
     else if (m.type === 'region') showRegions();
   }
@@ -1027,15 +1241,93 @@
     });
     if (pts.length < 3) { toast('A region needs at least 3 corners.', 'warn'); return; }
     const editId = mode.editId;
+    const target = mode.target;
     cancelMode(true);
+    if (target === 'fog') {
+      let f = editId && byFog(editId);
+      if (f) f.points = pts;
+      else { f = { id: uid(), name: 'Fog ' + (data.fog.length + 1), active: true, points: pts }; data.fog.push(f); }
+      renderFog(); changed(); showFogForm(f);
+      return;
+    }
     let r = editId && byRegion(editId);
-    if (r) r.points = pts;
+    if (r) { r.points = pts; r.shape = null; }
     else {
-      r = { id: uid(), name: 'New region', description: '', color: '#9b6dff', font: 'Cinzel', size: 'l', points: pts };
+      r = { id: uid(), name: 'New region', description: '', color: '#9b6dff', font: 'Cinzel', size: 'l', coast: true, points: pts, shape: null };
       data.regions.push(r);
     }
     renderRegions(); changed(); showRegionForm(r);
     const n = $('#rf-name'); if (n) { n.focus(); n.select(); }
+    if (r.coast) traceCoast(r);
+  }
+
+  // --- Coastline tracing: cut the water out of a region ---
+  let clipperLoading = null;
+  function loadClipper() {
+    if (window.polygonClipping) return Promise.resolve(window.polygonClipping);
+    if (!clipperLoading) {
+      clipperLoading = new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/polygon-clipping@0.15.7/dist/polygon-clipping.umd.min.js';
+        s.onload = () => res(window.polygonClipping);
+        s.onerror = () => { clipperLoading = null; rej(new Error('couldn’t load the shape tool')); };
+        document.head.appendChild(s);
+      });
+    }
+    return clipperLoading;
+  }
+  async function traceCoast(r) {
+    const id = r.id;
+    $('#veil').textContent = 'Tracing the coastline…';
+    $('#veil').hidden = false;
+    try {
+      const pc = await loadClipper();
+      const bb = ringBox(r.points);
+      // Make sure the whole area is on screen so its map data is loaded.
+      map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: 40, animate: false, maxZoom: 15 });
+      await Promise.race([new Promise((res) => map.once('idle', res)), new Promise((res) => setTimeout(res, 5000))]);
+      map.triggerRepaint();
+      const water = [];
+      for (const f of map.querySourceFeatures('base', { sourceLayer: 'water' })) {
+        const g = f.geometry;
+        const polys = g && g.type === 'Polygon' ? [g.coordinates] : g && g.type === 'MultiPolygon' ? g.coordinates : [];
+        for (const p of polys) {
+          const b = ringBox(p[0]);
+          if (b[2] >= bb[0] && b[0] <= bb[2] && b[3] >= bb[1] && b[1] <= bb[3]) water.push(p);
+        }
+      }
+      const outline = [[...r.points, r.points[0]]];
+      let shape = water.length ? pc.difference(outline, ...water) : null;
+      if (shape) {
+        // Tidy up: drop slivers and tiny holes, thin out points, round coordinates.
+        const total = ringArea(outline[0]);
+        const tol = Math.max(bb[2] - bb[0], bb[3] - bb[1]) / 1200;
+        const thin = (ring) => {
+          const outR = [ring[0]];
+          for (let i = 1; i < ring.length - 1; i++) {
+            const p = ring[i], q = outR[outR.length - 1];
+            if (Math.abs(p[0] - q[0]) > tol || Math.abs(p[1] - q[1]) > tol) outR.push(p);
+          }
+          outR.push(ring[ring.length - 1]);
+          return outR.map((p) => [Math.round(p[0] * 1e5) / 1e5, Math.round(p[1] * 1e5) / 1e5]);
+        };
+        shape = shape
+          .filter((poly) => ringArea(poly[0]) > total * 0.004)
+          .map((poly) => poly.filter((ring, i) => i === 0 || ringArea(ring) > total * 0.001).map(thin).filter((ring) => ring.length >= 4))
+          .filter((poly) => poly.length);
+        if (!shape.length) shape = null;
+      }
+      const cur = byRegion(id);
+      if (!cur || !cur.coast) return;
+      cur.shape = shape;
+      renderRegions(); changed();
+      toast(shape ? 'Coastline traced: water is left out of the region.' : 'No coastline in this area, so the shape stays as drawn.', 'ok');
+    } catch (e) {
+      toast('Couldn’t trace the coastline (' + e.message + '). The shape stays as drawn.', 'warn', 7000);
+    } finally {
+      $('#veil').hidden = true;
+      $('#veil').textContent = 'Publishing…';
+    }
   }
 
   // --- shared form pieces ---
@@ -1074,11 +1366,36 @@
     s.addEventListener('change', () => onChange(s.value));
     return s;
   }
-  function colorPicker(box, value, onPick) {
+  function symbolPicker(value, onPick) {
+    const grid = el('div', 'sym-grid');
+    Object.entries(SYMBOLS).forEach(([k, [label]]) => {
+      const b = el('button', 'sym' + (k === value ? ' on' : ''));
+      b.type = 'button';
+      b.title = label;
+      b.setAttribute('aria-label', label);
+      b.innerHTML = symbolSvg(k, 20, 'currentColor');
+      b.onclick = () => { grid.querySelectorAll('.sym').forEach((x) => x.classList.remove('on')); b.classList.add('on'); onPick(k); };
+      grid.appendChild(b);
+    });
+    return grid;
+  }
+  function sizeField(value, onInput) {
+    const f = el('div', 'field', 'Size on the map');
+    const row = el('div', 'size-row');
+    const r = el('input');
+    r.type = 'range'; r.min = '0.5'; r.max = '2.5'; r.step = '0.1'; r.value = String(value || 1);
+    const out = el('span', 'size-val', Math.round((value || 1) * 100) + '%');
+    r.oninput = () => { out.textContent = Math.round(+r.value * 100) + '%'; onInput(+r.value); };
+    row.appendChild(r);
+    row.appendChild(out);
+    f.appendChild(row);
+    return f;
+  }
+  function colorPicker(box, value, onPick, palette = PIN_COLORS) {
     box.innerHTML = '';
     const custom = el('input', 'sw-custom');
     const mark = (v) => box.querySelectorAll('.sw').forEach((b) => b.classList.toggle('on', b.dataset.c === v));
-    PIN_COLORS.forEach((c) => {
+    palette.forEach((c) => {
       const b = el('button', 'sw');
       b.type = 'button'; b.dataset.c = c; b.style.background = c; b.title = c;
       b.onclick = () => { custom.value = c; mark(c); onPick(c); };
@@ -1195,7 +1512,7 @@
 
   // --- Pins ---
   function placePin(p) {
-    const loc = { id: uid(), kind: 'place', name: 'New place', description: '', lng: p[0], lat: p[1], titleFont: '', bodyFont: '', textSize: '', color: '', image: '', shops: [], npcs: [] };
+    const loc = { id: uid(), kind: 'place', name: 'New place', description: '', lng: p[0], lat: p[1], titleFont: '', bodyFont: '', textSize: '', color: '', image: '', symbol: '', symbolColor: '', scale: 1, shops: [], npcs: [] };
     data.locations.push(loc);
     addMarker(loc);
     changed();
@@ -1252,6 +1569,15 @@
     b.appendChild(row);
     b.appendChild(field('Text size', selectInput([['', 'Default'], ['s', 'Small'], ['m', 'Medium'], ['l', 'Large']], loc.textSize, (v) => { loc.textSize = v; refresh(); })));
     b.appendChild(colorField('Pin color', loc.color || data.defaults.color, (c) => { loc.color = c; refresh(); }));
+    const sf = el('div', 'field', 'Symbol');
+    sf.appendChild(symbolPicker(symbolOf(loc), (k) => { loc.symbol = k; refresh(); }));
+    b.appendChild(sf);
+    const sc = el('div', 'field', 'Symbol color');
+    const scBox = el('div', 'swatches');
+    sc.appendChild(scBox);
+    colorPicker(scBox, safeColor(loc.symbolColor, '#141414'), (c) => { loc.symbolColor = c; refresh(); }, SYMBOL_COLORS);
+    b.appendChild(sc);
+    b.appendChild(sizeField(loc.scale, (v) => { loc.scale = v; refresh(); }));
     b.appendChild(imageField(loc, refresh, loc.kind === 'settlement' ? 'Main picture (optional)' : 'Image (optional)'));
 
     if (loc.kind === 'settlement') {
@@ -1303,12 +1629,12 @@
     data.regions.forEach((r) => ul.appendChild(listButton(r.color, r.name || 'Unnamed region', null, () => selectRegion(r.id, null, true))));
     b.appendChild(ul);
   }
-  function startDrawing(editId) {
-    setMode({ type: 'region', points: [], editId }, 'Click to add corners · double-click or Enter to finish · Backspace undoes · Esc cancels');
+  function startDrawing(editId, target) {
+    setMode({ type: 'region', points: [], editId, target: target || 'region' }, 'Click to add corners · double-click or Enter to finish · Backspace undoes · Esc cancels');
     showDrawing();
   }
   function showDrawing() {
-    currentView = 'drawing'; setTab('regions');
+    currentView = 'drawing'; setTab(mode && mode.target === 'fog' ? 'fog' : 'regions');
     const b = body();
     b.appendChild(el('p', null, 'Click around the edge of the area on the map, one corner at a time.'));
     b.appendChild(el('p', 'muted', `${mode ? mode.points.length : 0} corner${mode && mode.points.length === 1 ? '' : 's'} so far.`));
@@ -1337,8 +1663,21 @@
     b.appendChild(field('Description (shown when players click the area)', textInput(r.description, (v) => { r.description = v; refresh(); }, { multiline: true, rows: 5 })));
     const row = el('div', 'row');
     row.appendChild(field('Label font', fontInput(r.font, null, (v) => { r.font = v; refresh(); })));
-    row.appendChild(field('Label size', selectInput([['m', 'Medium'], ['l', 'Large'], ['xl', 'Huge']], r.size, (v) => { r.size = v; refresh(); })));
+    row.appendChild(field('Biggest name size', selectInput([['m', 'Medium'], ['l', 'Large'], ['xl', 'Huge']], r.size, (v) => { r.size = v; refresh(); })));
     b.appendChild(row);
+    b.appendChild(el('p', 'tip', 'The name shrinks to fit inside the region and grows as you zoom in.'));
+    const cl = el('label', 'check');
+    const cb = el('input');
+    cb.type = 'checkbox';
+    cb.checked = r.coast;
+    cb.onchange = () => {
+      r.coast = cb.checked;
+      if (r.coast) traceCoast(r);
+      else { r.shape = null; refresh(); }
+    };
+    cl.appendChild(cb);
+    cl.appendChild(document.createTextNode(' Follow the coastline (leave out water)'));
+    b.appendChild(cl);
     b.appendChild(colorField('Color', r.color, (c) => { r.color = c; refresh(); }));
     const foot = el('div', 'form-foot');
     foot.appendChild(btn('Delete region', 'danger', async () => {
@@ -1348,6 +1687,50 @@
     }));
     foot.appendChild(btn('Redraw shape', 'small', () => startDrawing(r.id)));
     foot.appendChild(btn('Done', 'primary', () => { popup.remove(); showRegions(); }));
+    b.appendChild(foot);
+  }
+
+  // --- Fog of war ---
+  function showFog() {
+    currentView = 'fog'; selectedId = null; setTab('fog'); updateStatus(); popup.remove();
+    const b = body();
+    b.appendChild(btn('+ Draw fog area', 'primary list-add', () => startDrawing(null, 'fog')));
+    b.appendChild(btn('Fog the whole map', 'small list-add', () => {
+      const [[w, s], [e, n]] = LOCK_BOUNDS;
+      const f = { id: uid(), name: 'Whole map', active: true, points: [[w - 0.05, s - 0.05], [e + 0.05, s - 0.05], [e + 0.05, n + 0.05], [w - 0.05, n + 0.05]] };
+      data.fog.push(f); renderFog(); changed(); showFogForm(f);
+    }));
+    b.appendChild(el('p', 'tip', 'Players see fog as a dark cover, and any pins, quests or region names under it are hidden. You see it see-through here. Lift the fog when the party explores an area.'));
+    if (!data.fog.length) { b.appendChild(el('p', 'muted', 'No fog yet.')); return; }
+    const ul = el('ul', 'pin-list');
+    data.fog.forEach((f) => ul.appendChild(listButton('#55555e', f.name || 'Fog area', f.active ? ['hidden', 'Fogged'] : ['done', 'Lifted'], () => {
+      map.easeTo({ center: centroid(f.points), duration: 500 });
+      showFogForm(f);
+    })));
+    b.appendChild(ul);
+    const row = el('div', 'btn-row');
+    row.style.marginTop = '12px';
+    row.appendChild(btn('Lift all fog', 'small', () => { data.fog.forEach((f) => { f.active = false; }); renderFog(); changed(); showFog(); }));
+    row.appendChild(btn('Fog everything again', 'small ghost', () => { data.fog.forEach((f) => { f.active = true; }); renderFog(); changed(); showFog(); }));
+    b.appendChild(row);
+  }
+  function showFogForm(f) {
+    currentView = 'fogarea'; selectedId = f.id; setTab(null); updateStatus(); popup.remove();
+    const b = body();
+    b.appendChild(el('div', 'form-head')).appendChild(btn('← All fog', 'ghost small', showFog));
+    b.appendChild(field('Name (only you see this)', textInput(f.name, (v) => { f.name = v; changed(); })));
+    const box = el('div', 'reveal-box' + (f.active ? '' : ' on'));
+    box.appendChild(el('div', null, f.active ? 'Fogged: players can’t see this area.' : 'Lifted: players can see this area.'));
+    box.appendChild(btn(f.active ? 'Lift the fog' : 'Bring the fog back', f.active ? 'accent' : 'small', () => { f.active = !f.active; renderAll(); changed(); showFogForm(f); }));
+    b.appendChild(box);
+    b.appendChild(el('p', 'tip', 'Press Publish afterwards so your players see the change.'));
+    const foot = el('div', 'form-foot');
+    foot.appendChild(btn('Delete', 'danger', async () => {
+      if (!(await ask(`Delete “${f.name || 'this fog area'}”?`, 'Delete', 'Keep it'))) return;
+      data.fog = data.fog.filter((x) => x !== f); renderFog(); changed(); showFog();
+    }));
+    foot.appendChild(btn('Redraw shape', 'small', () => startDrawing(f.id, 'fog')));
+    foot.appendChild(btn('Done', 'primary', showFog));
     b.appendChild(foot);
   }
 
@@ -1363,7 +1746,7 @@
     b.appendChild(ul);
   }
   function newQuest(locationId) {
-    const q = { id: uid(), title: 'New quest', description: '', status: 'active', giver: '', locationId: locationId || '', lng: null, lat: null, revealed: false };
+    const q = { id: uid(), title: 'New quest', description: '', status: 'active', giver: '', locationId: locationId || '', lng: null, lat: null, revealed: false, scale: 1 };
     data.quests.push(q);
     changed();
     showQuestForm(q);
@@ -1404,6 +1787,7 @@
     const settlements = data.locations.filter((l) => l.kind === 'settlement').map((l) => [l.id, l.name || 'Unnamed settlement']);
     b.appendChild(field('From settlement', selectInput([['', '(none)'], ...settlements], q.locationId, (v) => { q.locationId = v; refresh(); })));
 
+    b.appendChild(sizeField(q.scale, (v) => { q.scale = v; refresh(); }));
     const mk = el('div', 'field', 'Quest marker on the map');
     const mr = el('div', 'btn-row');
     mr.style.marginTop = '8px';

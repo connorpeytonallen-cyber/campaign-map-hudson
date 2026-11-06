@@ -96,7 +96,14 @@ body.placing .maplibregl-canvas-container.maplibregl-interactive { cursor: cross
 .dot { flex: none; width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 0 2px rgba(0, 0, 0, .5); }
 
 .ed-body label, .field { display: block; margin: 0 0 14px; color: var(--muted); font-size: 12px; font-weight: 600; }
-.ed-body input:not([type=checkbox]):not([type=color]):not([type=file]), .ed-body textarea, .ed-body select {
+.sym-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 6px; margin-top: 8px; }
+.sym { display: flex; align-items: center; justify-content: center; height: 36px; padding: 0; border: 1px solid #34343b; border-radius: 8px; background: #0d0d10; color: #cfc9bb; cursor: pointer; }
+.sym:hover { border-color: #55555e; color: #fff; }
+.sym.on { border-color: var(--accent); background: rgba(232, 176, 74, .14); color: var(--accent); }
+.size-row { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.size-row input[type=range] { flex: 1; accent-color: var(--accent); }
+.size-val { min-width: 44px; text-align: right; color: var(--text); font-weight: 600; }
+.ed-body input:not([type=checkbox]):not([type=color]):not([type=file]):not([type=range]), .ed-body textarea, .ed-body select {
   display: block; width: 100%; margin-top: 6px; padding: 9px 10px; border: 1px solid #34343b; border-radius: 8px; background: #0d0d10; color: var(--text); font: 14px/1.4 var(--ui);
 }
 .ed-body textarea { resize: vertical; min-height: 110px; }
