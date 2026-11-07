@@ -413,10 +413,13 @@
     const key = Object.keys(carto.sources).find((k) => carto.sources[k].type === 'vector');
     const source = Object.assign({}, carto.sources[key], { attribution: '' });
     const empty = { type: 'FeatureCollection', features: [] };
+    const fogData = fogCollections(); // fog is in the very first frame, so nothing peeks through while loading
     const layers = baseLayers('base');
     const at = layers.findIndex((l) => l.id === 'roads-minor');
     layers.splice(at, 0, { id: 'regions-fill', type: 'fill', source: 'regions', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.16 } });
     layers.push(
+      // Everything outside the campaign area is covered in fog, so rotating the map never shows past its edge.
+      { id: 'outside', type: 'fill', source: 'outside', paint: { 'fill-pattern': 'fog-tex', 'fill-opacity': 1 } },
       { id: 'fog-haze', type: 'line', source: 'fog-soft', filter: ['==', ['get', 'active'], true], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#1e1e24', 'line-width': 90, 'line-blur': 80, 'line-opacity': 0.55 } },
       { id: 'fog-edge', type: 'line', source: 'fog-soft', filter: ['==', ['get', 'active'], true], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#1c1c21', 'line-width': 34, 'line-blur': 28, 'line-opacity': 0.9 } },
       { id: 'fog-fill', type: 'fill', source: 'fog', filter: ['==', ['get', 'active'], true], paint: { 'fill-pattern': 'fog-tex', 'fill-opacity': 0.98 } },
@@ -430,9 +433,9 @@
       { id: 'draft-pts', type: 'circle', source: 'draft', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 5, 'circle-color': '#e8b04a', 'circle-stroke-color': '#000', 'circle-stroke-width': 1.5 } }
     );
     // Region outlines go under the fog; the drawing preview stays on top of everything.
-    const rl = layers.findIndex((l) => l.id === 'regions-line'), fe = layers.findIndex((l) => l.id === 'fog-haze');
+    const rl = layers.findIndex((l) => l.id === 'regions-line'), fe = layers.findIndex((l) => l.id === 'outside');
     layers.splice(fe, 0, layers.splice(rl, 1)[0]);
-    return { version: 8, sources: { base: source, regions: { type: 'geojson', data: empty }, fog: { type: 'geojson', data: empty }, 'fog-soft': { type: 'geojson', data: empty, tolerance: 8, buffer: 256 }, draft: { type: 'geojson', data: empty } }, layers };
+    return { version: 8, sources: { base: source, regions: { type: 'geojson', data: empty }, fog: { type: 'geojson', data: fogData.fog }, 'fog-soft': { type: 'geojson', data: fogData.soft, tolerance: 8, buffer: 256 }, outside: { type: 'geojson', data: outsideMask() }, draft: { type: 'geojson', data: empty } }, layers };
   }
 
   // ===== App state =====
@@ -476,7 +479,10 @@
     setupRotate();
     popup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, maxWidth: 'none', className: 'loc-popup', focusAfterOpen: false });
     popup.on('close', () => { popupKey = null; highlight(null); });
-    map.on('load', () => { styleReady = true; fitSize(); renderFog(); renderRegions(); });
+    // Keep the map hidden until the fog is drawn, so a refresh never flashes the whole map.
+    map.getContainer().classList.add('loading');
+    const reveal = () => map.getContainer().classList.remove('loading');
+    map.on('load', () => { styleReady = true; fitSize(); renderFog(); renderRegions(); map.once('idle', reveal); setTimeout(reveal, 4000); });
     map.on('styleimagemissing', (e) => { if ((e.id === 'fog-tex' || e.id === 'fog-wisp') && !map.hasImage(e.id)) { buildFogLook(); pushFogImages(); startFogAnim(); } });
     if (window.ResizeObserver) new ResizeObserver(() => fitSize()).observe(map.getContainer());
     lockZoom();
@@ -492,6 +498,7 @@
     let zoomQueued = false;
     map.on('zoom', () => { if (zoomQueued) return; zoomQueued = true; requestAnimationFrame(() => { zoomQueued = false; fitRegionLabels(); fitStickers(); }); });
     map.on('resize', () => { lockZoom(); fitRegionLabels(); });
+    map.on('rotate', lockZoom);
     if (document.fonts) document.fonts.addEventListener('loadingdone', () => { perCache.clear(); fitRegionLabels(); });
     // Pointer cursor over regions; checked at most once per frame.
     let hoverPt = null;
@@ -566,8 +573,11 @@
     const c = map.getContainer();
     if (!c.clientWidth || !c.clientHeight) return;
     const a = maplibregl.MercatorCoordinate.fromLngLat(LOCK_BOUNDS[0]), b = maplibregl.MercatorCoordinate.fromLngLat(LOCK_BOUNDS[1]);
-    const zw = Math.log2(c.clientWidth / (512 * Math.abs(b.x - a.x)));
-    const zh = Math.log2(c.clientHeight / (512 * Math.abs(b.y - a.y)));
+    // When the map is turned, the screen's corners reach further, so it needs to be zoomed in a bit more.
+    const br = map.getBearing() * Math.PI / 180, cs = Math.abs(Math.cos(br)), sn = Math.abs(Math.sin(br));
+    const vw = c.clientWidth * cs + c.clientHeight * sn, vh = c.clientWidth * sn + c.clientHeight * cs;
+    const zw = Math.log2(vw / (512 * Math.abs(b.x - a.x)));
+    const zh = Math.log2(vh / (512 * Math.abs(b.y - a.y)));
     map.setMinZoom(Math.max(zw, zh));
   }
 
@@ -722,18 +732,27 @@
     return r;
   }
   let fogBoxes = [];
+  function fogCollections() {
+    const shaped = data.fog.filter((f) => f.shape), active = shaped.filter((f) => f.active);
+    fogBoxes = active.map((f) => ringBox(f.shape.flatMap((p) => p[0])));
+    return {
+      fog: { type: 'FeatureCollection', features: shaped.map((f) => ({ type: 'Feature', properties: { id: f.id, active: f.active }, geometry: { type: 'MultiPolygon', coordinates: f.shape } })) },
+      soft: { type: 'FeatureCollection', features: active.map((f) => ({ type: 'Feature', properties: { active: true }, geometry: { type: 'MultiLineString', coordinates: f.shape.flatMap((poly) => poly.map((ring) => smoothRing(ring, 2))) } })) }
+    };
+  }
+  // The whole world with a hole cut out for the campaign area.
+  function outsideMask() {
+    const [[w, s], [e, n]] = LOCK_BOUNDS;
+    return { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [
+      [[-179, -84], [179, -84], [179, 84], [-179, 84], [-179, -84]],
+      [[w, s], [w, n], [e, n], [e, s], [w, s]]
+    ] } };
+  }
   function renderFog() {
     if (!styleReady) return;
-    const shaped = data.fog.filter((f) => f.shape);
-    map.getSource('fog').setData({
-      type: 'FeatureCollection',
-      features: shaped.map((f) => ({ type: 'Feature', properties: { id: f.id, active: f.active }, geometry: { type: 'MultiPolygon', coordinates: f.shape } }))
-    });
-    map.getSource('fog-soft').setData({
-      type: 'FeatureCollection',
-      features: shaped.filter((f) => f.active).map((f) => ({ type: 'Feature', properties: { active: true }, geometry: { type: 'MultiLineString', coordinates: f.shape.flatMap((poly) => poly.map((ring) => smoothRing(ring, 2))) } }))
-    });
-    fogBoxes = shaped.filter((f) => f.active).map((f) => ringBox(f.shape.flatMap((p) => p[0])));
+    const c = fogCollections();
+    map.getSource('fog').setData(c.fog);
+    map.getSource('fog-soft').setData(c.soft);
     applyFogLook();
   }
   // Players see thick fog with soft edges; you see it see-through with an outline.
@@ -852,7 +871,7 @@
     b.appendChild(label);
     // A pin set to show through fog: players see a faded, foggy pin they can't open yet.
     const hazy = !editing && loc.throughFog && fogged(loc.lng, loc.lat);
-    if (hazy) b.classList.add('in-fog');
+    if (hazy) { b.classList.add('in-fog'); label.remove(); } // no name tag on the map; players click to learn the name
     b.addEventListener('click', (e) => {
       e.stopPropagation();
       if (editing) selectPin(loc.id);
@@ -1181,7 +1200,7 @@
   function openFoggedPopup(loc) {
     const d = data.defaults;
     showPopup('loc:' + loc.id, [loc.lng, loc.lat], card({
-      title: loc.name || 'Untitled place', kicker: 'Still in the fog',
+      title: loc.name || 'Untitled place',
       titleFont: loc.titleFont || d.titleFont, bodyFont: loc.bodyFont || d.bodyFont,
       color: loc.color || d.color, size: loc.textSize || d.textSize, description: '…'
     }), pinSize(loc)[1] + 2);

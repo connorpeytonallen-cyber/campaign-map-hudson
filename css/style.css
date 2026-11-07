@@ -425,3 +425,6 @@ body.editing .qmarker { cursor: grab; }
   .editor { top: auto; left: 0; width: auto; height: 56vh; border-left: 0; border-top: 1px solid var(--line); }
   .sheet { top: auto; height: 78vh; border-left: 0; border-top: 1px solid var(--line); border-radius: 14px 14px 0 0; }
 }
+
+#map .maplibregl-canvas { transition: opacity .35s ease; }
+#map.loading .maplibregl-canvas { opacity: 0; }
