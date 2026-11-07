@@ -2992,7 +2992,23 @@ window.MAP_DATA = {
           "name": "The General Store",
           "keeper": "Dot",
           "description": "“A railway boxcar with one side cut open. A woman sits inside on an upturned crate with a ledger on her knee, and everything behind her has a price chalked on it.”",
-          "items": "-Rations $15 each 2x Available\n-Pistol rounds $6 each, rifle rounds $8 each, shotgun shells $10 each.\n-Bandages (1d4) $20. \n-Lamp oil $10. \n-Rope $10.\n-Fuel, enough for two trips, $100.\n",
+          "items": "Inventory:\n-Rations $15 each 2x Available\n-Pistol rounds $6 each, rifle rounds $8 each, shotgun shells $10 each.\n-Bandages (1d4) $20. \n-Lamp oil $10. \n-Rope $10.\n-Fuel, enough for two trips, $100.\n",
+          "image": ""
+        },
+        {
+          "id": "pmw60ttdnfblk",
+          "name": "The Doctor",
+          "keeper": "Doc Whitlow",
+          "description": "“A canvas tent with a red cross painted on it by hand. The man inside washes his instruments in a pot of boiled water and does not look up until he has finished.”",
+          "items": "Services:\n-Recovery; 2d6+2 for $30, or to full health for $50.\n-Fear or Hunger: Restores 25 hunger or 25 sanity for 40$.",
+          "image": ""
+        },
+        {
+          "id": "pmw60w8y77r6s",
+          "name": "The Alcohol Salesman",
+          "keeper": "Sully",
+          "description": "“A handcart with a striped awning, loaded with bottles that have no two labels alike. The man behind it is already pouring before you have asked.”\n",
+          "items": "Services:\n-Drinks: Sells a drink for $5 and a bottle for $20 (four drinks).\n-Rumors: Tells you a random rumor for 10$ once per long rest.\n",
           "image": ""
         }
       ],
