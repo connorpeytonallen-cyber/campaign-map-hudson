@@ -1292,7 +1292,7 @@
 
   function onMapClick(e) {
     const t = e.originalEvent && e.originalEvent.target;
-    if (t && t.closest && (t.closest('.pin') || t.closest('.qmarker') || t.closest('.maplibregl-popup'))) return;
+    if (t && t.closest && (t.closest('.pin') || t.closest('.qmarker') || t.closest('.party-token') || t.closest('.maplibregl-popup'))) return;
     if (editing && ruler.active) { rulerClick(e.lngLat); return; }
     if (editing && mode) { handleModeClick(e.lngLat); return; }
     if (fogged(e.lngLat.lng, e.lngLat.lat)) { popup.remove(); return; }
@@ -1575,8 +1575,9 @@
     } catch (e) { relayState = 'offline'; renderParty(); return; }
     relay.on('connect', () => {
       relayState = 'live';
-      relay.subscribe([`${ROOM}/p/+`, `${ROOM}/rename/${me.id}`, `${ROOM}/dice/log`, `${ROOM}/kick/+`, `${ROOM}/sound`, `${ROOM}/sound/state`, `${ROOM}/abilities/${me.id}`]);
+      relay.subscribe([`${ROOM}/p/+`, `${ROOM}/rename/${me.id}`, `${ROOM}/dice/log`, `${ROOM}/kick/+`, `${ROOM}/sound`, `${ROOM}/sound/state`, `${ROOM}/abilities/${me.id}`, `${ROOM}/partypos`]);
       if (editing) relay.subscribe([`${ROOM}/abilities/+`, `${ROOM}/sheet/+`]);
+      restorePartyPos();
       announce();
       resendSheetIfPending();
       renderParty();
@@ -1598,6 +1599,7 @@
     if (topic === `${ROOM}/sound` || topic === `${ROOM}/sound/state`) { onSoundMessage(topic, txt); return; }
     if (topic.startsWith(`${ROOM}/abilities/`)) { onAbilityMessage(topic.split('/').pop(), txt); return; }
     if (topic.startsWith(`${ROOM}/sheet/`)) { onSheetMessage(topic.split('/').pop(), txt); return; }
+    if (topic === `${ROOM}/partypos`) { try { onPartyPosMessage(txt); } catch (e) { /* bad message */ } return; }
     if (topic === `${ROOM}/rename/${me.id}`) {
       if (!txt) return;
       try {
@@ -2751,6 +2753,8 @@
     showList();
     announce(); renderParty(); renderDice(); renderSoundCtl();
     if (relay && relay.connected) relay.subscribe([`${ROOM}/abilities/+`, `${ROOM}/sheet/+`]);
+    renderPartyToken(false);
+    restorePartyPos();
   }
 
   function exitEdit() {
@@ -2766,6 +2770,7 @@
     renderAll();
     map.resize();
     announce(); renderParty(); renderDice(); renderSoundCtl();
+    renderPartyToken(false);
     if (hadChanges) toast('Your unpublished changes are saved on this device. Open #edit again to finish and publish.', 'info', 7000);
   }
 
@@ -2867,6 +2872,7 @@
     const p = [round6(ll.lng), round6(ll.lat)];
     if (mode.type === 'brush') return;
     if (mode.type === 'pin') { cancelMode(true); placePin(p); }
+    else if (mode.type === 'party') { cancelMode(true); setPartyPos({ lng: p[0], lat: p[1], shown: true }); showList(); }
     else if (mode.type === 'quest') {
       const q = byQuest(mode.id);
       cancelMode(true);
@@ -3202,6 +3208,22 @@
     currentView = 'list'; selectedId = null; setTab('list'); updateStatus();
     const b = body();
     b.appendChild(btn('+ Add pin', 'primary list-add', () => setMode({ type: 'pin' }, 'Click the map where the new pin goes · Esc to cancel')));
+    // The party token: players see it move live.
+    const pt = el('div', 'party-token-box');
+    pt.appendChild(el('b', null, 'Party token'));
+    const placeIt = () => setMode({ type: 'party' }, 'Click the map where the party is · Esc to cancel');
+    if (!partyPos) {
+      pt.appendChild(el('span', 'tip', 'Show players where the party is. It moves live on everyone’s screen.'));
+      pt.appendChild(btn('Place the party', 'small accent', placeIt));
+    } else {
+      pt.appendChild(el('span', 'tip', partyPos.shown ? 'Drag it on the map to move the party; players see it move live.' : 'Hidden from players.'));
+      const r = el('div', 'btn-row');
+      r.appendChild(btn('Move here…', 'small', placeIt));
+      r.appendChild(btn('Find it', 'small ghost', () => map.easeTo({ center: [partyPos.lng, partyPos.lat], duration: 600 })));
+      r.appendChild(btn(partyPos.shown ? 'Hide from players' : 'Show to players', 'small ghost', () => { setPartyPos(Object.assign({}, partyPos, { shown: !partyPos.shown })); showList(); }));
+      pt.appendChild(r);
+    }
+    b.appendChild(pt);
     if (!data.locations.length) { b.appendChild(el('p', 'muted', 'No pins yet.')); return; }
     const ul = el('ul', 'pin-list');
     data.locations.forEach((loc) => ul.appendChild(listButton(safeColor(loc.color || data.defaults.color), loc.name || 'Untitled place',
@@ -3605,6 +3627,76 @@
     list('Actives (attacks can carry dice the player loads into the roller)', 'actives', true);
   }
 
+  // ===== Party token: the DM moves it, everyone sees it move live (over the relay, no refresh) =====
+  const PARTY_POS_KEY = () => 'campaign-map.partyPos:' + SITE_KEY;
+  let partyPos = null, partyMarker = null, partyDragging = false, partyAnim = 0, partySendTimer = null;
+  function cleanPartyPos(p) {
+    if (!p || typeof p !== 'object' || num(p.lng) == null || num(p.lat) == null) return null;
+    return { lng: num(p.lng), lat: num(p.lat), shown: p.shown !== false, ts: num(p.ts) || 0 };
+  }
+  // If the relay lost the party's spot, the DM's device puts it back.
+  function restorePartyPos() {
+    setTimeout(() => {
+      if (!editing || partyPos) return;
+      const saved = cleanPartyPos(lsGet(PARTY_POS_KEY(), null));
+      if (saved) { partyPos = saved; sendPartyPos(); renderPartyToken(false); if (currentView === 'list') showList(); }
+    }, 2500);
+  }
+  function sendPartyPos() {
+    if (!editing || !partyPos) return;
+    lsSet(PARTY_POS_KEY(), partyPos);
+    if (relay && relay.connected) relay.publish(`${ROOM}/partypos`, JSON.stringify(partyPos), { retain: true });
+  }
+  function setPartyPos(p) {
+    partyPos = Object.assign(cleanPartyPos(p) || {}, { ts: Date.now() });
+    sendPartyPos();
+    renderPartyToken(false);
+  }
+  function onPartyPosMessage(txt) {
+    const p = txt ? cleanPartyPos(JSON.parse(txt)) : null;
+    if (editing && partyDragging) return;
+    if (p && partyPos && p.ts && p.ts < partyPos.ts) return;
+    partyPos = p;
+    renderPartyToken(true);
+    if (editing && currentView === 'list') showList();
+  }
+  function renderPartyToken(animate) {
+    if (!map) return;
+    const visible = partyPos && (partyPos.shown || editing);
+    if (!visible) { if (partyMarker) { partyMarker.remove(); partyMarker = null; } return; }
+    if (!partyMarker) {
+      const elx = el('div', 'party-token');
+      elx.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2a1 1 0 0 1 1 1v1.1A5 5 0 0 1 17 9v7l1.6 2.2A1 1 0 0 1 17.8 20H6.2a1 1 0 0 1-.8-1.8L7 16V9a5 5 0 0 1 4-4.9V3a1 1 0 0 1 1-1zm0 6.2c-.9 1.2-2 2.4-2 3.8a2 2 0 0 0 4 0c0-1.4-1.1-2.6-2-3.8zM9.5 21h5a2.5 2.5 0 0 1-5 0z"/></svg><span class="party-token-label">The party</span>';
+      elx.title = 'The party';
+      partyMarker = new maplibregl.Marker({ element: elx, anchor: 'center' }).setLngLat([partyPos.lng, partyPos.lat]).addTo(map);
+      partyMarker.on('dragstart', () => { partyDragging = true; });
+      partyMarker.on('drag', () => {
+        const ll = partyMarker.getLngLat();
+        partyPos = Object.assign({}, partyPos, { lng: round6(ll.lng), lat: round6(ll.lat), ts: Date.now() });
+        if (!partySendTimer) partySendTimer = setTimeout(() => { partySendTimer = null; sendPartyPos(); }, 150); // live while dragging
+      });
+      partyMarker.on('dragend', () => {
+        partyDragging = false;
+        const ll = partyMarker.getLngLat();
+        setPartyPos(Object.assign({}, partyPos, { lng: round6(ll.lng), lat: round6(ll.lat) }));
+      });
+      animate = false;
+    }
+    partyMarker.setDraggable(!!editing);
+    partyMarker.getElement().classList.toggle('hidden-from-players', !partyPos.shown);
+    const to = [partyPos.lng, partyPos.lat];
+    cancelAnimationFrame(partyAnim);
+    if (!animate) { partyMarker.setLngLat(to); return; }
+    // Glide to the new spot.
+    const from = partyMarker.getLngLat().toArray(), t0 = performance.now(), dur = 700;
+    const step = (now) => {
+      const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+      partyMarker.setLngLat([from[0] + (to[0] - from[0]) * e, from[1] + (to[1] - from[1]) * e]);
+      if (k < 1) partyAnim = requestAnimationFrame(step);
+    };
+    partyAnim = requestAnimationFrame(step);
+  }
+
   // --- Ruler: measure a route and see how long the party takes ---
   const ruler = { active: false, points: [], hover: null, mode: 'foot', pace: 0, labels: [] };
   const RULER_PREF = 'campaign-map.ruler';
@@ -3739,6 +3831,7 @@
     b.appendChild(seg(Object.entries(TRAVEL).map(([k, v]) => [k, v.name]), ruler.mode, (k) => { ruler.mode = k; lsSet(RULER_PREF, { mode: ruler.mode, pace: ruler.pace }); drawRuler(); showRuler(); }));
     b.appendChild(el('div', 'sub-h', 'Pace'));
     b.appendChild(seg(PACES.map(([n], i) => [i, n]), ruler.pace, (i) => { ruler.pace = i; lsSet(RULER_PREF, { mode: ruler.mode, pace: ruler.pace }); drawRuler(); showRuler(); }));
+    if (partyPos && !ruler.points.length) b.appendChild(btn('Start at the party', 'small accent', () => { ruler.points = [[partyPos.lng, partyPos.lat]]; drawRuler(); showRuler(); }));
     const ro = el('div', 'ruler-readout');
     ro.id = 'ruler-readout';
     b.appendChild(ro);

@@ -468,4 +468,14 @@ body.measuring .maplibregl-canvas { cursor: crosshair; }
 .ruler-time { font: 700 20px var(--ui); color: var(--text); }
 .ruler-sub { font-size: 12px; color: #9a958b; margin-top: 2px; }
 .ruler-notes { margin: 10px 0 6px; padding-left: 18px; font-size: 12.5px; color: var(--text); display: grid; gap: 4px; }
-.ruler-label { padding: 2px 7px; border-radius: 6px; background: rgba(16, 16, 19, .92); border: 1px solid #e8b04a; color: #f3e6c8; font: 700 11px var(--ui); white-space: nowrap; pointer-events: none; }
+.ruler-label { padding: 2px 7px; border-radius: 6px; background: rgba(16, 16, 19, .92); border: 1px solid #e8b04a; color: #f3e6c8; font: 700 11px var(--ui); white-space: nowrap; pointer-events: none; }/* Live party token */
+.party-token { position: relative; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 40%, #3a2a12, #17110a); color: #f3c66b; border: 2px solid #e8b04a; box-shadow: 0 0 0 3px rgba(0, 0, 0, .55), 0 0 18px rgba(232, 176, 74, .55); z-index: 6; }
+.party-token::after { content: ''; position: absolute; inset: -8px; border-radius: 50%; border: 2px solid rgba(232, 176, 74, .55); animation: party-ping 2.4s ease-out infinite; pointer-events: none; }
+@keyframes party-ping { from { transform: scale(.7); opacity: 1; } to { transform: scale(1.5); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .party-token::after { animation: none; opacity: .5; } }
+.party-token-label { position: absolute; top: 100%; left: 50%; transform: translate(-50%, 8px); padding: 2px 7px; border-radius: 6px; background: rgba(16, 16, 19, .92); border: 1px solid #3a3a41; color: #f3e6c8; font: 700 11px var(--ui); white-space: nowrap; pointer-events: none; }
+body.editing .party-token { cursor: grab; }
+.party-token.hidden-from-players { opacity: .5; filter: grayscale(.6); }
+.party-token-box { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; margin: 12px 0; border: 1px solid #5a4724; border-radius: 10px; background: rgba(232, 176, 74, .06); }
+.party-token-box .tip { margin: 0; }
+.party-token-box .btn-row { margin: 0; }
