@@ -1555,8 +1555,9 @@
     relay.on('connect', () => {
       relayState = 'live';
       relay.subscribe([`${ROOM}/p/+`, `${ROOM}/rename/${me.id}`, `${ROOM}/dice/log`, `${ROOM}/kick/+`, `${ROOM}/sound`, `${ROOM}/sound/state`, `${ROOM}/abilities/${me.id}`]);
-      if (editing) relay.subscribe(`${ROOM}/abilities/+`);
+      if (editing) relay.subscribe([`${ROOM}/abilities/+`, `${ROOM}/sheet/+`]);
       announce();
+      resendSheetIfPending();
       renderParty();
     });
     relay.on('message', onRelayMessage);
@@ -1575,6 +1576,7 @@
     if (topic.startsWith(`${ROOM}/kick/`)) { onKickMessage(topic.split('/').pop(), txt); return; }
     if (topic === `${ROOM}/sound` || topic === `${ROOM}/sound/state`) { onSoundMessage(topic, txt); return; }
     if (topic.startsWith(`${ROOM}/abilities/`)) { onAbilityMessage(topic.split('/').pop(), txt); return; }
+    if (topic.startsWith(`${ROOM}/sheet/`)) { onSheetMessage(topic.split('/').pop(), txt); return; }
     if (topic === `${ROOM}/rename/${me.id}`) {
       if (!txt) return;
       try {
@@ -2261,19 +2263,20 @@
     ['Coastal Worker', 'Radio Operator', { wit: 1, reflex: 1 }, 'Signal Clarity: advantage on Logic checks with radio equipment. Extended Relay: longer range for standard communication devices. Emergency Broadcast: once per combat, allies ignore illusion penalties for one round.']
   ];
   const sheetKey = () => 'campaign-map.sheet:' + SITE_KEY;
-  function loadSheet() {
-    const s = lsGet(sheetKey(), {}) || {};
+  const loadSheet = () => cleanSheet(lsGet(sheetKey(), {}));
+  function cleanSheet(s) {
+    s = s && typeof s === 'object' ? s : {};
     const stats = {}, subs = {};
     PROWESS.forEach(([k, , list]) => {
       stats[k] = Math.min(STAT_MAX, Math.max(1, Math.round(num(s.stats && s.stats[k]) || 1)));
       list.forEach((n) => { subs[n] = Math.max(0, Math.min(10, Math.round(num(s.subs && s.subs[n]) || 0))); });
     });
-    const t = (k) => str(s[k]);
+    const t = (k) => str(s[k]).slice(0, 2000);
     return {
       player: t('player'), name: t('name'), background: BACKGROUNDS.some((b) => b[1] === s.background) ? s.background : '',
       affiliation: t('affiliation'), level: Math.max(1, Math.min(99, Math.round(num(s.level) || 1))), age: t('age'), height: t('height'), weight: t('weight'),
-      traits: t('traits'), stats, subs, stamina: t('stamina'), movement: t('movement'), meleeMod: t('meleeMod'),
-      inventory: arr(s.inventory).filter(Boolean).map((i) => ({ id: str(i.id) || uid(), name: str(i.name), qty: str(i.qty), notes: str(i.notes) }))
+      traits: t('traits'), stats, subs,
+      inventory: arr(s.inventory).filter(Boolean).slice(0, 300).map((i) => ({ id: str(i.id) || uid(), name: str(i.name).slice(0, 200), qty: str(i.qty).slice(0, 20), notes: str(i.notes).slice(0, 1000) }))
     };
   }
   // Abilities are given by the DM. Players get them over the relay and keep a copy on their device.
@@ -2478,9 +2481,6 @@
       combat.appendChild(c);
     });
     body.appendChild(combat);
-    const cg = el('div', 'cs-grid');
-    [['stamina', 'Stamina capacity'], ['movement', 'Movement speed'], ['meleeMod', 'Melee damage modifier']].forEach(([k, l]) => cg.appendChild(text(k, l)));
-    body.appendChild(cg);
 
     section('Inventory');
     if (!s.inventory.length) body.appendChild(el('p', 'cs-hint', 'Nothing yet. Add weapons, armor, tools, ammo, keepsakes…'));
@@ -2500,7 +2500,6 @@
 
     const ab = myAbilities();
     section('Passives');
-    if (!ab.passives.length) body.appendChild(el('p', 'cs-hint', 'None yet. Your DM adds these.'));
     ab.passives.forEach((p) => {
       const c = el('div', 'cs-ability');
       c.appendChild(el('b', null, p.name || 'Unnamed passive'));
@@ -2508,7 +2507,6 @@
       body.appendChild(c);
     });
     section('Actives');
-    if (!ab.actives.length) body.appendChild(el('p', 'cs-hint', 'None yet. Your DM adds these.'));
     ab.actives.forEach((p) => {
       const c = el('div', 'cs-ability');
       const top = el('div', 'cs-atop');
@@ -2521,7 +2519,44 @@
       if (p.desc.trim()) { const d = el('div', 'cs-adesc'); d.innerHTML = richText(p.desc); c.appendChild(d); }
       body.appendChild(c);
     });
-    body.appendChild(el('p', 'meta', 'Your character sheet is saved only in this browser on this device.'));
+    const saveRow = el('div', 'cs-save');
+    saveRow.appendChild(btn('Save character', 'primary', () => { clearTimeout(sheetSaveTimer); lsSet(sheetKey(), s); sendSheet(s, true); renderLog(); }));
+    const sent = lsGet(SHEET_SENT_KEY(), null);
+    saveRow.appendChild(el('span', 'meta', sent && sent.pending ? 'Saved here. Will reach your DM when you’re back online.'
+      : sent && sent.ts ? 'Last sent to your DM ' + new Date(sent.ts).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) + '.'
+      : 'Saving sends a copy of your character to your DM.'));
+    body.appendChild(saveRow);
+    body.appendChild(el('p', 'meta', 'Your character sheet is kept in this browser on this device.'));
+  }
+  // ===== Saved characters go to the DM (over the live relay, kept there until replaced) =====
+  const SHEET_SENT_KEY = () => 'campaign-map.sheetSent:' + SITE_KEY, DM_SHEETS_KEY = () => 'campaign-map.dmSheets:' + SITE_KEY;
+  function sendSheet(s, loud) {
+    const msg = { id: me.id, by: me.name || '', ts: Date.now(), sheet: s };
+    if (relay && relay.connected && !isKicked()) {
+      relay.publish(`${ROOM}/sheet/${me.id}`, JSON.stringify(msg), { retain: true });
+      lsSet(SHEET_SENT_KEY(), { ts: msg.ts });
+      if (loud) toast('Character saved and sent to your DM.', 'ok', 3500);
+    } else {
+      lsSet(SHEET_SENT_KEY(), { ts: 0, pending: true });
+      if (loud) toast('Character saved. It will be sent to your DM once you’re back online.', 'warn', 5000);
+    }
+  }
+  function resendSheetIfPending() {
+    const st = lsGet(SHEET_SENT_KEY(), null);
+    if (st && st.pending) sendSheet(loadSheet(), false);
+  }
+  function onSheetMessage(id, txt) {
+    if (!editing || !txt) return;
+    let m;
+    try { m = JSON.parse(txt); } catch (e) { return; }
+    if (!m || typeof m !== 'object') return;
+    const all = lsGet(DM_SHEETS_KEY(), {}) || {};
+    const ts = num(m.ts) || 0;
+    if (all[id] && (num(all[id].ts) || 0) >= ts) return;
+    all[id] = { ts, by: cleanName(str(m.by)) || 'Unnamed', sheet: cleanSheet(m.sheet) };
+    lsSet(DM_SHEETS_KEY(), all);
+    if (Date.now() - ts < 60000) toast(all[id].by + ' saved their character.', 'info', 4000);
+    if (currentView === 'characters') showCharacters(selectedId);
   }
   // Set the dice tray up for an active ability's attack; the player presses Roll.
   function loadIntoDice(p) {
@@ -2537,7 +2572,7 @@
   const PANEL_HTML = `
     <div class="ed-head"><div class="ed-title">Map editor</div><div class="ed-status" id="ed-status"></div></div>
     <div class="ed-actions"><button type="button" class="btn accent" id="ed-publish">Publish</button></div>
-    <div class="ed-tabs"><button type="button" data-tab="list">Pins</button><button type="button" data-tab="regions">Regions</button><button type="button" data-tab="quests">Quests</button><button type="button" data-tab="fog">Fog</button><button type="button" data-tab="stickers">Stickers</button><button type="button" data-tab="monsters">Monsters</button><button type="button" data-tab="sounds">Sounds</button><button type="button" data-tab="settings">Settings</button></div>
+    <div class="ed-tabs"><button type="button" data-tab="list">Pins</button><button type="button" data-tab="regions">Regions</button><button type="button" data-tab="quests">Quests</button><button type="button" data-tab="fog">Fog</button><button type="button" data-tab="stickers">Stickers</button><button type="button" data-tab="characters">Characters</button><button type="button" data-tab="monsters">Monsters</button><button type="button" data-tab="sounds">Sounds</button><button type="button" data-tab="settings">Settings</button></div>
     <div class="ed-body" id="ed-body"></div>
     <div class="ed-foot"><span class="muted small">Only you can publish changes.</span>
       <button type="button" class="btn ghost small" id="ed-exit">Exit editor</button></div>`;
@@ -2611,7 +2646,7 @@
     renderAll();
     showList();
     announce(); renderParty(); renderDice(); renderSoundCtl();
-    if (relay && relay.connected) relay.subscribe(`${ROOM}/abilities/+`);
+    if (relay && relay.connected) relay.subscribe([`${ROOM}/abilities/+`, `${ROOM}/sheet/+`]);
   }
 
   function exitEdit() {
@@ -2658,6 +2693,7 @@
     else if (tab === 'quests') showQuests();
     else if (tab === 'fog') showFog();
     else if (tab === 'stickers') showStickers();
+    else if (tab === 'characters') showCharacters();
     else if (tab === 'monsters') showMonsters();
     else if (tab === 'sounds') showSounds();
     else if (tab === 'settings') showSettings();
@@ -2680,6 +2716,7 @@
     else if (currentView === 'monster' && byMonster(selectedId)) showMonsterForm(byMonster(selectedId));
     else if (currentView === 'monsters' || currentView === 'monster') showMonsters();
     else if (currentView === 'sounds') showSounds();
+    else if (currentView === 'characters') showCharacters(selectedId);
     else if (currentView === 'stickers' || currentView === 'sticker') showStickers();
     else if (currentView === 'foglook') showFogLook();
     else if (currentView === 'fog' || currentView === 'fogarea' || currentView === 'brush') showFog();
@@ -3458,6 +3495,89 @@
     };
     list('Passives', 'passives', false);
     list('Actives (attacks can carry dice the player loads into the roller)', 'actives', true);
+  }
+
+  // --- Characters: every player's saved sheet, read-only ---
+  function showCharacters(id) {
+    if (!editing) return;
+    currentView = 'characters'; selectedId = null; setTab('characters'); updateStatus(); popup.remove();
+    const b = body();
+    const all = lsGet(DM_SHEETS_KEY(), {}) || {};
+    const ids = Object.keys(all).sort((x, y) => (all[y].ts || 0) - (all[x].ts || 0));
+    if (!ids.length) {
+      b.appendChild(el('p', 'muted', 'No characters yet. When a player presses “Save character” on their sheet, a copy shows up here.'));
+      return;
+    }
+    if (!id || !all[id]) id = ids[0];
+    selectedId = id;
+    const label = (k) => (all[k].sheet.name || 'Unnamed character') + ' · ' + all[k].by + (party.has(k) ? ' (online)' : '');
+    b.appendChild(field('Character', selectInput(ids.map((k) => [k, label(k)]), id, (v) => showCharacters(v))));
+    const e = all[id], s = e.sheet;
+    b.appendChild(el('p', 'tip', 'Saved ' + new Date(e.ts).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) + '. This updates each time the player saves.'));
+
+    const sec = (t) => b.appendChild(el('div', 'sub-h', t));
+    const kv = (pairs) => {
+      const g = el('div', 'ch-grid');
+      pairs.filter(([, v]) => v !== '' && v != null).forEach(([k, v]) => { const c = el('div', 'ch-kv'); c.appendChild(el('span', null, k)); c.appendChild(el('b', null, String(v))); g.appendChild(c); });
+      b.appendChild(g);
+    };
+    b.appendChild(el('div', 'ch-name', s.name || 'Unnamed character'));
+    kv([['Player', s.player || e.by], ['Level', s.level], ['Affiliation', s.affiliation], ['Age', s.age], ['Height', s.height], ['Weight', s.weight]]);
+    if (s.traits.trim()) b.appendChild(el('p', 'ch-text', s.traits));
+
+    const bg = bgOf(s);
+    sec('Background');
+    if (bg) {
+      b.appendChild(el('p', 'ch-text', bg[1] + ' (' + bg[0] + ') · ' + Object.entries(bg[2]).map(([k, v]) => `+${v} ${PROWESS.find((p) => p[0] === k)[1]}`).join(', ')));
+      b.appendChild(el('p', 'ch-text ch-dim', bg[3]));
+    } else b.appendChild(el('p', 'muted', 'None chosen.'));
+
+    sec('P.R.O.W.E.S.S');
+    PROWESS.forEach(([k, name, list]) => {
+      const tot = statTotal(s, k), card = el('div', 'ch-stat');
+      const top = el('div', 'ch-stat-top');
+      top.appendChild(el('b', null, name));
+      top.appendChild(el('span', null, tot + ' (' + fmtBonus(statBonus(tot)) + ')'));
+      card.appendChild(top);
+      const subs = el('div', 'ch-subs');
+      list.forEach((n) => subs.appendChild(el('span', null, n + ' ' + fmtBonus(subValue(s, k, n)))));
+      card.appendChild(subs);
+      b.appendChild(card);
+    });
+
+    sec('Combat profile');
+    const vit = subValue(s, 'endurance', 'Vitality'), eva = subValue(s, 'outlook', 'Evasion'), spd = subValue(s, 'reflex', 'Speed');
+    kv([['Max health', 10 + vit * s.level], ['Armor class', Math.min(19, 10 + eva)], ['Turn order (Speed)', spd]]);
+
+    sec('Inventory');
+    if (!s.inventory.length) b.appendChild(el('p', 'muted', 'Empty.'));
+    s.inventory.forEach((it) => {
+      const r = el('div', 'ch-item');
+      r.appendChild(el('b', null, (it.name || 'Unnamed item') + (it.qty && it.qty !== '1' ? ' ×' + it.qty : '')));
+      if (it.notes) r.appendChild(el('span', null, it.notes));
+      b.appendChild(r);
+    });
+
+    const ab = cleanAbilities((lsGet(DM_ABIL_KEY(), {}) || {})[id]);
+    sec('Passives & actives');
+    if (!ab.passives.length && !ab.actives.length) b.appendChild(el('p', 'muted', 'None given yet.'));
+    ab.passives.concat(ab.actives).forEach((p) => {
+      const r = el('div', 'ch-item');
+      r.appendChild(el('b', null, (p.name || 'Unnamed') + (p.sides ? ' · ' + diceLabel(p.count, p.sides, p.mod) : '')));
+      if (p.desc) r.appendChild(el('span', null, p.desc));
+      b.appendChild(r);
+    });
+
+    const foot = el('div', 'form-foot');
+    foot.appendChild(btn('Remove from list', 'danger', async () => {
+      if (!(await ask(`Remove ${s.name || 'this character'} from your list? It comes back if the player saves again.`, 'Remove', 'Keep it'))) return;
+      const a2 = lsGet(DM_SHEETS_KEY(), {}) || {};
+      delete a2[id]; lsSet(DM_SHEETS_KEY(), a2);
+      if (relay && relay.connected) relay.publish(`${ROOM}/sheet/${id}`, '', { retain: true });
+      showCharacters();
+    }));
+    foot.appendChild(btn('Edit abilities', 'primary', () => showAbilityEditor(id)));
+    b.appendChild(foot);
   }
 
   // --- Monster Logbook: stat blocks ---
