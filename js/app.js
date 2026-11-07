@@ -2205,8 +2205,10 @@
     if (!box || box.hidden || !p) return;
     const r = p.getBoundingClientRect();
     if (!r.width) { box.style.left = '14px'; box.style.top = '14px'; return; }
+    // Line it up with the middle of the party box's top bar.
+    const head = p.querySelector('.party-head'), hr = head ? head.getBoundingClientRect() : r;
     box.style.left = Math.round(r.right + 10) + 'px';
-    box.style.top = Math.round(r.top) + 'px';
+    box.style.top = Math.round(hr.top + (hr.height - box.offsetHeight) / 2) + 'px';
   }
   function readFileAsDataURL(file) {
     return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => rej(fr.error); fr.readAsDataURL(file); });
