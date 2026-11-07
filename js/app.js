@@ -3222,6 +3222,9 @@
       r.appendChild(btn('Find it', 'small ghost', () => map.easeTo({ center: [partyPos.lng, partyPos.lat], duration: 600 })));
       r.appendChild(btn(partyPos.shown ? 'Hide from players' : 'Show to players', 'small ghost', () => { setPartyPos(Object.assign({}, partyPos, { shown: !partyPos.shown })); showList(); }));
       pt.appendChild(r);
+      const st = el('div', 'party-status');
+      PARTY_STATUS.forEach(([k, label]) => st.appendChild(btn(label, 'small st-' + k + (partyPos.status === k ? ' on' : ''), () => { setPartyPos(Object.assign({}, partyPos, { status: k })); showList(); })));
+      pt.appendChild(st);
     }
     b.appendChild(pt);
     if (!data.locations.length) { b.appendChild(el('p', 'muted', 'No pins yet.')); return; }
@@ -3629,10 +3632,12 @@
 
   // ===== Party token: the DM moves it, everyone sees it move live (over the relay, no refresh) =====
   const PARTY_POS_KEY = () => 'campaign-map.partyPos:' + SITE_KEY;
+  // How beat up the party is: the token's colour.
+  const PARTY_STATUS = [['good', 'Healthy'], ['hurt', 'Battered'], ['bad', 'In bad shape']];
   let partyPos = null, partyMarker = null, partyDragging = false, partyAnim = 0, partySendTimer = null;
   function cleanPartyPos(p) {
     if (!p || typeof p !== 'object' || num(p.lng) == null || num(p.lat) == null) return null;
-    return { lng: num(p.lng), lat: num(p.lat), shown: p.shown !== false, ts: num(p.ts) || 0 };
+    return { lng: num(p.lng), lat: num(p.lat), shown: p.shown !== false, status: PARTY_STATUS.some(([k]) => k === p.status) ? p.status : 'good', ts: num(p.ts) || 0 };
   }
   // If the relay lost the party's spot, the DM's device puts it back.
   function restorePartyPos() {
@@ -3683,7 +3688,10 @@
       animate = false;
     }
     partyMarker.setDraggable(!!editing);
-    partyMarker.getElement().classList.toggle('hidden-from-players', !partyPos.shown);
+    const pe = partyMarker.getElement();
+    pe.classList.toggle('hidden-from-players', !partyPos.shown);
+    PARTY_STATUS.forEach(([k]) => pe.classList.toggle('st-' + k, partyPos.status === k));
+    pe.title = 'The party · ' + PARTY_STATUS.find(([k]) => k === partyPos.status)[1];
     const to = [partyPos.lng, partyPos.lat];
     cancelAnimationFrame(partyAnim);
     if (!animate) { partyMarker.setLngLat(to); return; }
