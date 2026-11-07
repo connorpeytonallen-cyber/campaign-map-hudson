@@ -3094,11 +3094,23 @@ window.MAP_DATA = {
       "id": "pmw4fy3u5qsot",
       "title": "The Lost Truck",
       "description": "\"Nickel’s scouts have seen the Good’s Caught Wild truck on the road, but will not go near it without making sure any creatures and foes are disposed of.\"\n",
-      "status": "active",
+      "status": "done",
       "giver": "Nickel",
       "locationId": "pmw4fyq1snq33",
       "lng": -79.856163,
       "lat": 32.813322,
+      "revealed": true,
+      "scale": 1
+    },
+    {
+      "id": "pmw60l5ftyzua",
+      "title": "The Missing Scout",
+      "description": "\"A scout named Pruitt went across the bridge toward Joe’s Fish Factory three days ago and has not come back.\"\n",
+      "status": "active",
+      "giver": "Nickel",
+      "locationId": "pmw4fyq1snq33",
+      "lng": -79.930233,
+      "lat": 32.783567,
       "revealed": true,
       "scale": 1
     }
