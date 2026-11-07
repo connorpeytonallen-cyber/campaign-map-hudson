@@ -222,8 +222,21 @@
       locations: [],
       quests: [],
       fog: [],
-      stickers: []
+      stickers: [],
+      monsters: []
     };
+    for (const m of arr(d.monsters)) {
+      if (!m) continue;
+      const score = (v) => Math.min(30, Math.max(1, Math.round(num(v) || 10)));
+      out.monsters.push({
+        id: str(m.id) || uid(), name: str(m.name), meta: str(m.meta), image: safeImageSrc(m.image),
+        ac: str(m.ac), hp: str(m.hp), speed: str(m.speed),
+        str: score(m.str), dex: score(m.dex), con: score(m.con), int: score(m.int), wis: score(m.wis), cha: score(m.cha),
+        saves: str(m.saves), skills: str(m.skills), resist: str(m.resist), senses: str(m.senses), languages: str(m.languages), cr: str(m.cr),
+        traits: str(m.traits), actions: str(m.actions), reactions: str(m.reactions), legendary: str(m.legendary), notes: str(m.notes),
+        revealed: !!m.revealed
+      });
+    }
     for (const s of arr(d.stickers)) {
       if (!s || num(s.lng) == null || num(s.lat) == null) continue;
       const lib = STICKERS.some(([k]) => k === s.lib) ? s.lib : '';
@@ -1157,7 +1170,12 @@
     lb.appendChild(sheetHead('Logbook', () => toggleLog(false)));
     const quests = visibleQuests(data);
     const unseen = new Set(unseenQuests().map((q) => q.id));
-    lb.appendChild(tabBar([['quests', `Quests${unseen.size ? ' (' + unseen.size + ' new)' : ''}`], ['people', 'People'], ['notes', 'My notes']], logTab, (id) => { logTab = id; renderLog(); }));
+    const beasts = data.monsters.filter((m) => m.revealed);
+    const tabs = [['quests', `Quests${unseen.size ? ' (' + unseen.size + ' new)' : ''}`], ['people', 'People']];
+    if (beasts.length) tabs.push(['bestiary', 'Bestiary']);
+    tabs.push(['notes', 'My notes']);
+    if (logTab === 'bestiary' && !beasts.length) logTab = 'quests';
+    lb.appendChild(tabBar(tabs, logTab, (id) => { logTab = id; renderLog(); }));
     const scroll = el('div', 'sheet-scroll');
     const body = el('div', 'tab-body');
     if (logTab === 'quests') {
@@ -1183,6 +1201,8 @@
         people.forEach((n) => body.appendChild(npcCard(n, tf, bf)));
       });
       if (!any) body.appendChild(el('p', 'empty', 'Nobody yet. People you meet show up here.'));
+    } else if (logTab === 'bestiary') {
+      beasts.forEach((m) => body.appendChild(statBlock(m)));
     } else {
       const ta = el('textarea', 'notes');
       ta.placeholder = 'Write anything you want to remember: clues, names, debts, theories…';
@@ -1204,8 +1224,10 @@
   const ONLINE_MS = 120000;
   const roomHash = (() => { let h = 2166136261; for (const c of location.host + location.pathname.replace(/index\.html$/, '')) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); })();
   const ROOM = 'campaignmap-v1/' + roomHash;
-  let relay = null, me = null, relayState = 'connecting', partyEdit = null;
+  let relay = null, me = null, relayState = 'connecting', partyEdit = null, kickedUntil = 0;
   const party = new Map();
+  const kicked = new Map(); // id -> { name, until } (what the DM sees)
+  const KICK_MS = 24 * 3600 * 1000;
   const cleanName = (n) => String(n || '').replace(/\s+/g, ' ').trim().slice(0, 24);
   const initialOf = (n) => (cleanName(n).match(/[\p{L}\p{N}]/u) || ['?'])[0].toUpperCase();
   const inkOn = (hex) => { const v = parseInt(hex.slice(1), 16); const l = (0.299 * (v >> 16) + 0.587 * ((v >> 8) & 255) + 0.114 * (v & 255)) / 255; return l > 0.6 ? '#141414' : '#ffffff'; };
@@ -1240,7 +1262,7 @@
     } catch (e) { relayState = 'offline'; renderParty(); return; }
     relay.on('connect', () => {
       relayState = 'live';
-      relay.subscribe([`${ROOM}/p/+`, `${ROOM}/rename/${me.id}`, `${ROOM}/dice/log`]);
+      relay.subscribe([`${ROOM}/p/+`, `${ROOM}/rename/${me.id}`, `${ROOM}/dice/log`, `${ROOM}/kick/+`]);
       announce();
       renderParty();
     });
@@ -1251,12 +1273,13 @@
     window.addEventListener('pagehide', () => { try { relay.publish(myTopic, '', { retain: true }); relay.end(true); } catch (e) { /* closing */ } });
   }
   function announce() {
-    if (!relay || !relay.connected) return;
+    if (!relay || !relay.connected || isKicked()) return;
     relay.publish(`${ROOM}/p/${me.id}`, JSON.stringify({ id: me.id, name: me.name, color: me.color, dm: editing, ts: Date.now() }), { retain: true });
   }
   function onRelayMessage(topic, payload) {
     const txt = payload.toString();
-    if (topic === `${ROOM}/dice/log`) { if (txt) onDiceMessage(txt); return; }
+    if (topic === `${ROOM}/dice/log`) { if (!isKicked() && txt) onDiceMessage(txt); return; }
+    if (topic.startsWith(`${ROOM}/kick/`)) { onKickMessage(topic.split('/').pop(), txt); return; }
     if (topic === `${ROOM}/rename/${me.id}`) {
       if (!txt) return;
       try {
@@ -1273,7 +1296,7 @@
       return;
     }
     const id = topic.split('/').pop();
-    if (id === me.id) return;
+    if (id === me.id || isKicked()) return;
     if (!txt) { party.delete(id); renderParty(); return; }
     try {
       const p = JSON.parse(txt);
@@ -1282,6 +1305,45 @@
       renderParty();
     } catch (e) { /* bad message */ }
   }
+  // --- Kicking: the DM removes a player from the live session (party list and dice) ---
+  const isKicked = () => !editing && kickedUntil > Date.now();
+  function onKickMessage(id, txt) {
+    let k = null;
+    try { k = txt ? JSON.parse(txt) : null; } catch (e) { k = null; }
+    const until = k && num(k.until) ? num(k.until) : 0;
+    if (until > Date.now()) kicked.set(id, { name: cleanName(k.name) || 'Unnamed', until }); else kicked.delete(id);
+    if (id === me.id) {
+      const was = isKicked();
+      kickedUntil = until;
+      if (isKicked() && !was) {
+        try { relay.publish(`${ROOM}/p/${me.id}`, '', { retain: true }); } catch (e) { /* ignore */ }
+        party.clear();
+        toast('The DM removed you from this session. You can still look at the map.', 'warn', 12000);
+      } else if (!isKicked() && was) {
+        toast('The DM let you back into the session.', 'ok', 6000);
+        announce();
+        // fetch the current party and dice again
+        try { relay.unsubscribe([`${ROOM}/p/+`, `${ROOM}/dice/log`], () => relay.subscribe([`${ROOM}/p/+`, `${ROOM}/dice/log`])); } catch (e) { /* ignore */ }
+      }
+      renderDice();
+    }
+    renderParty();
+  }
+  function kickPlayer(p) {
+    if (!editing || !relay || !relay.connected) { toast('Can’t reach the live service, so nobody can be kicked right now.', 'warn'); return; }
+    relay.publish(`${ROOM}/kick/${p.id}`, JSON.stringify({ name: p.name, until: Date.now() + KICK_MS }), { retain: true });
+    relay.publish(`${ROOM}/p/${p.id}`, '', { retain: true });
+    party.delete(p.id);
+    partyEdit = null;
+    toast(`${p.name || 'That player'} was removed from the session.`, 'ok');
+    renderParty();
+  }
+  function unkickPlayer(id) {
+    if (relay && relay.connected) relay.publish(`${ROOM}/kick/${id}`, '', { retain: true });
+    kicked.delete(id);
+    renderParty();
+  }
+
   function avatar(p, size) {
     const a = el('span', 'avatar', initialOf(p.name));
     a.style.background = p.color;
@@ -1293,8 +1355,18 @@
     const box = $('#party');
     if (!box || !me) return;
     const now = Date.now();
-    const others = [...party.values()].filter((p) => now - p.ts < ONLINE_MS)
+    const others = [...party.values()].filter((p) => now - p.ts < ONLINE_MS && !(kicked.has(p.id) && kicked.get(p.id).until > now))
       .sort((a, b) => (b.dm - a.dm) || a.name.localeCompare(b.name));
+    if (isKicked()) {
+      box.innerHTML = '';
+      box.classList.remove('collapsed');
+      const h = el('div', 'party-head');
+      h.appendChild(el('span', 'party-dot offline'));
+      h.appendChild(el('span', 'party-title', 'Removed from session'));
+      box.appendChild(h);
+      box.appendChild(el('div', 'party-note', 'The DM removed you from the live session. You can still look at the map.'));
+      return;
+    }
     const all = [{ ...me, dm: editing, you: true }, ...others];
     const open = lsGet(PARTY_OPEN_KEY, true);
     box.innerHTML = '';
@@ -1327,6 +1399,18 @@
       if (partyEdit && partyEdit.id === p.id) list.appendChild(partyEditorForm(p.you ? me : party.get(p.id)));
     });
     if (relayState === 'offline') list.appendChild(el('div', 'party-note', 'Can’t reach the live service right now, so only you are shown. It keeps trying.'));
+    if (editing) {
+      const out = [...kicked.entries()].filter(([, k]) => k.until > now);
+      if (out.length) {
+        list.appendChild(el('div', 'party-note', 'Kicked from the session:'));
+        out.forEach(([id, k]) => {
+          const r = el('div', 'party-kicked');
+          r.appendChild(el('span', 'party-name', k.name));
+          r.appendChild(btn('Let back in', 'small', () => unkickPlayer(id)));
+          list.appendChild(r);
+        });
+      }
+    }
     box.appendChild(list);
     fillDiceControls();
   }
@@ -1357,6 +1441,14 @@
     });
     f.appendChild(sw);
     const row = el('div', 'party-edit-btns');
+    if (!isMe && editing) {
+      const k = btn('Kick', 'small danger', async () => {
+        if (!(await ask(`Remove ${p.name || 'this player'} from the session? They won’t appear in the party or be able to roll dice until you let them back in.`, 'Kick', 'Cancel'))) return;
+        kickPlayer(p);
+      });
+      k.style.marginRight = 'auto';
+      row.appendChild(k);
+    }
     row.appendChild(btn('Cancel', 'small ghost', () => { partyEdit = null; renderParty(); }));
     const save = btn('Save', 'small primary');
     save.type = 'submit';
@@ -1430,6 +1522,7 @@
     renderDice(true);
   }
   function doRoll() {
+    if (isKicked()) { toast('You were removed from the session, so you can’t roll.', 'warn'); return; }
     const results = Array.from({ length: diceCount }, () => rollDie(diceSides));
     const target = editing && diceFor ? party.get(diceFor) : null;
     const e = {
@@ -1501,6 +1594,7 @@
   function renderDice(scroll) {
     const box = $('#dice');
     if (!box || !me) return;
+    if (isKicked()) { box.innerHTML = ''; return; }
     const open = lsGet(DICE_OPEN_KEY, false);
     box.classList.toggle('open', open);
     if (!open) {
@@ -1605,7 +1699,7 @@
   const PANEL_HTML = `
     <div class="ed-head"><div class="ed-title">Map editor</div><div class="ed-status" id="ed-status"></div></div>
     <div class="ed-actions"><button type="button" class="btn accent" id="ed-publish">Publish</button></div>
-    <div class="ed-tabs"><button type="button" data-tab="list">Pins</button><button type="button" data-tab="regions">Regions</button><button type="button" data-tab="quests">Quests</button><button type="button" data-tab="fog">Fog</button><button type="button" data-tab="stickers">Stickers</button><button type="button" data-tab="settings">Settings</button></div>
+    <div class="ed-tabs"><button type="button" data-tab="list">Pins</button><button type="button" data-tab="regions">Regions</button><button type="button" data-tab="quests">Quests</button><button type="button" data-tab="fog">Fog</button><button type="button" data-tab="stickers">Stickers</button><button type="button" data-tab="monsters">Monsters</button><button type="button" data-tab="settings">Settings</button></div>
     <div class="ed-body" id="ed-body"></div>
     <div class="ed-foot"><span class="muted small">Only you can publish changes.</span>
       <button type="button" class="btn ghost small" id="ed-exit">Exit editor</button></div>`;
@@ -1725,6 +1819,7 @@
     else if (tab === 'quests') showQuests();
     else if (tab === 'fog') showFog();
     else if (tab === 'stickers') showStickers();
+    else if (tab === 'monsters') showMonsters();
     else if (tab === 'settings') showSettings();
     else showList();
   }
@@ -1742,6 +1837,8 @@
     else if (currentView === 'region' && byRegion(selectedId)) showRegionForm(byRegion(selectedId));
     else if (currentView === 'fogarea' && byFog(selectedId)) showFogForm(byFog(selectedId));
     else if (currentView === 'sticker' && byStickerId(selectedId)) showStickerForm(byStickerId(selectedId));
+    else if (currentView === 'monster' && byMonster(selectedId)) showMonsterForm(byMonster(selectedId));
+    else if (currentView === 'monsters' || currentView === 'monster') showMonsters();
     else if (currentView === 'stickers' || currentView === 'sticker') showStickers();
     else if (currentView === 'fog' || currentView === 'fogarea' || currentView === 'brush') showFog();
     else if (currentView === 'settings') showSettings();
@@ -2421,6 +2518,122 @@
       data.stickers.push(c); addSticker(c); changed(); showStickerForm(c);
     }));
     foot.appendChild(btn('Done', 'primary', showStickers));
+    b.appendChild(foot);
+  }
+
+  // --- Monster Logbook: stat blocks ---
+  const byMonster = (id) => data.monsters.find((m) => m.id === id);
+  const abilityMod = (s) => { const v = Math.floor((s - 10) / 2); return (v >= 0 ? '+' : '−') + Math.abs(v); };
+  // "Multiattack. The beast makes two attacks." -> bold-italic name, then the text.
+  function statText(text) {
+    const wrap = el('div', 'sb-text');
+    text.split(/\n\s*\n|\n(?=[^\n]{1,60}\.\s)/).map((p) => p.trim()).filter(Boolean).forEach((p) => {
+      const para = el('p');
+      const m = /^([^.\n]{1,60})\.\s+([\s\S]*)$/.exec(p);
+      if (m) {
+        para.appendChild(el('b', 'sb-lead', m[1] + '.'));
+        const rest = el('span');
+        rest.innerHTML = ' ' + richText(m[2]);
+        para.appendChild(rest);
+      } else {
+        para.innerHTML = richText(p);
+      }
+      wrap.appendChild(para);
+    });
+    return wrap;
+  }
+  function statBlock(m) {
+    const sb = el('div', 'statblock');
+    if (m.image) sb.appendChild(zoomImg(m.image, m.name, 'sb-img'));
+    sb.appendChild(el('h3', 'sb-name', m.name || 'Unnamed creature'));
+    if (m.meta) sb.appendChild(el('div', 'sb-meta', m.meta));
+    sb.appendChild(el('div', 'sb-rule'));
+    const line = (label, value) => { if (!value) return; const d = el('div', 'sb-line'); d.appendChild(el('b', null, label + ' ')); d.appendChild(document.createTextNode(value)); sb.appendChild(d); };
+    line('Armor Class', m.ac); line('Hit Points', m.hp); line('Speed', m.speed);
+    sb.appendChild(el('div', 'sb-rule'));
+    const ab = el('div', 'sb-abilities');
+    [['STR', m.str], ['DEX', m.dex], ['CON', m.con], ['INT', m.int], ['WIS', m.wis], ['CHA', m.cha]].forEach(([k, v]) => {
+      const c = el('div');
+      c.appendChild(el('b', null, k));
+      c.appendChild(el('span', null, `${v} (${abilityMod(v)})`));
+      ab.appendChild(c);
+    });
+    sb.appendChild(ab);
+    sb.appendChild(el('div', 'sb-rule'));
+    line('Saving Throws', m.saves); line('Skills', m.skills); line('Resistances / Immunities', m.resist);
+    line('Senses', m.senses); line('Languages', m.languages); line('Challenge', m.cr);
+    if (m.traits.trim()) { sb.appendChild(el('div', 'sb-rule')); sb.appendChild(statText(m.traits)); }
+    const section = (title, text) => { if (!text.trim()) return; sb.appendChild(el('h4', 'sb-h', title)); sb.appendChild(statText(text)); };
+    section('Actions', m.actions); section('Reactions', m.reactions); section('Legendary Actions', m.legendary);
+    return sb;
+  }
+  function showMonsters() {
+    currentView = 'monsters'; selectedId = null; setTab('monsters'); updateStatus(); popup.remove();
+    const b = body();
+    b.appendChild(btn('+ Add monster', 'primary list-add', () => {
+      const m = { id: uid(), name: 'New monster', meta: 'Medium aberration, chaotic evil', image: '', ac: '12', hp: '22 (4d8 + 4)', speed: '30 ft.', str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10, saves: '', skills: '', resist: '', senses: 'passive Perception 10', languages: '', cr: '1 (200 XP)', traits: '', actions: '', reactions: '', legendary: '', notes: '', revealed: false };
+      data.monsters.push(m); changed(); showMonsterForm(m);
+      const n = $('#mf-name'); if (n) { n.focus(); n.select(); }
+    }));
+    b.appendChild(el('p', 'tip', 'Stat blocks for monsters you have on hand. Only you see them, unless you turn on “Show to players”, which adds that monster to the players’ Logbook under Bestiary.'));
+    if (!data.monsters.length) { b.appendChild(el('p', 'muted', 'No monsters yet.')); return; }
+    const ul = el('ul', 'pin-list');
+    data.monsters.forEach((m) => ul.appendChild(listButton('#c0392b', m.name || 'Unnamed creature', m.revealed ? ['done', 'Shown'] : ['hidden', 'DM only'], () => showMonsterForm(m))));
+    b.appendChild(ul);
+  }
+  function showMonsterForm(m) {
+    currentView = 'monster'; selectedId = m.id; setTab(null); updateStatus(); popup.remove();
+    const b = body();
+    b.appendChild(el('div', 'form-head')).appendChild(btn('← All monsters', 'ghost small', showMonsters));
+    const preview = el('div', 'sb-preview');
+    const redraw = () => { preview.innerHTML = ''; preview.appendChild(statBlock(m)); changed(); };
+    const vis = el('label', 'check');
+    const vc = el('input');
+    vc.type = 'checkbox'; vc.checked = m.revealed;
+    vc.onchange = () => { m.revealed = vc.checked; changed(); };
+    vis.appendChild(vc);
+    vis.appendChild(document.createTextNode(' Show to players (in their Logbook)'));
+    b.appendChild(vis);
+    const t = (key, label, opts) => { const i = textInput(m[key], (v) => { m[key] = v; redraw(); }, opts || {}); if (key === 'name') i.id = 'mf-name'; b.appendChild(field(label, i)); };
+    t('name', 'Name');
+    t('meta', 'Size, type, alignment', { placeholder: 'Large aberration, chaotic evil' });
+    const r1 = el('div', 'row3');
+    [['ac', 'Armor Class', '15 (natural armor)'], ['hp', 'Hit Points', '45 (6d10 + 12)'], ['speed', 'Speed', '30 ft., swim 40 ft.']].forEach(([k, l, ph]) => r1.appendChild(field(l, textInput(m[k], (v) => { m[k] = v; redraw(); }, { placeholder: ph }))));
+    b.appendChild(r1);
+    const abil = el('div', 'row6');
+    ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach((k) => {
+      const i = el('input');
+      i.type = 'number'; i.min = '1'; i.max = '30'; i.value = String(m[k]);
+      i.oninput = () => { m[k] = Math.min(30, Math.max(1, Math.round(+i.value || 10))); redraw(); };
+      abil.appendChild(field(k.toUpperCase(), i));
+    });
+    b.appendChild(abil);
+    t('saves', 'Saving throws', { placeholder: 'Con +5, Wis +3' });
+    t('skills', 'Skills', { placeholder: 'Perception +5, Stealth +4' });
+    t('resist', 'Resistances / immunities', { placeholder: 'cold; poisoned' });
+    t('senses', 'Senses', { placeholder: 'darkvision 120 ft., passive Perception 15' });
+    t('languages', 'Languages', { placeholder: 'understands Deep Speech but can’t speak' });
+    t('cr', 'Challenge', { placeholder: '5 (1,800 XP)' });
+    b.appendChild(el('p', 'tip', 'For traits and actions, start each one with its name and a period, e.g. “Bite. Melee Weapon Attack: +6 to hit…”. One per line.'));
+    t('traits', 'Traits', { multiline: true, rows: 4, placeholder: 'Amphibious. The creature can breathe air and water.' });
+    t('actions', 'Actions', { multiline: true, rows: 5, placeholder: 'Multiattack. The creature makes two Tentacle attacks.\nTentacle. Melee Weapon Attack: +6 to hit, reach 10 ft., one target. Hit: 10 (2d6 + 3) bludgeoning damage.' });
+    t('reactions', 'Reactions (optional)', { multiline: true, rows: 2 });
+    t('legendary', 'Legendary actions (optional)', { multiline: true, rows: 3 });
+    t('notes', 'DM notes (never shown to players)', { multiline: true, rows: 3, placeholder: 'Tactics, loot, where it lairs…' });
+    b.appendChild(imageField(m, redraw, 'Picture (optional)'));
+    b.appendChild(el('div', 'sub-h', 'Stat block'));
+    b.appendChild(preview);
+    preview.appendChild(statBlock(m));
+    const foot = el('div', 'form-foot');
+    foot.appendChild(btn('Delete monster', 'danger', async () => {
+      if (!(await ask(`Delete “${m.name || 'this monster'}”?`, 'Delete', 'Keep it'))) return;
+      data.monsters = data.monsters.filter((x) => x !== m); changed(); showMonsters();
+    }));
+    foot.appendChild(btn('Duplicate', 'small', () => {
+      const c = Object.assign(clone(m), { id: uid(), name: m.name + ' (copy)', revealed: false });
+      data.monsters.push(c); changed(); showMonsterForm(c);
+    }));
+    foot.appendChild(btn('Done', 'primary', showMonsters));
     b.appendChild(foot);
   }
 

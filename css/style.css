@@ -232,6 +232,29 @@ body.has-title #party { top: 76px; }
 body.editing #dice { right: 374px; }
 @media (max-width: 700px) { #dice.open { width: calc(100vw - 28px); } body.editing #dice { display: none; } }
 
+/* Monster stat blocks (classic parchment look) */
+.statblock { padding: 14px 16px 16px; border-radius: 6px; background: #f4ecd8; color: #2a2318; font: 14px/1.45 'Spectral', Georgia, serif; box-shadow: inset 0 0 0 1px #d8c9a3, 0 2px 10px rgba(0, 0, 0, .4); border-top: 4px solid #7a200d; border-bottom: 4px solid #7a200d; }
+.sb-img { display: block; width: 100%; max-height: 220px; object-fit: cover; margin-bottom: 10px; border-radius: 4px; cursor: zoom-in; }
+.sb-name { margin: 0; color: #7a200d; font: 700 22px/1.15 'Cinzel', Georgia, serif; letter-spacing: .02em; }
+.sb-meta { font-style: italic; font-size: 13px; }
+.sb-rule { height: 3px; margin: 8px 0; background: linear-gradient(90deg, #7a200d, rgba(122, 32, 13, .1)); }
+.sb-line { color: #7a200d; }
+.sb-line b { color: #7a200d; }
+.sb-abilities { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; text-align: center; color: #7a200d; }
+.sb-abilities b { display: block; font-size: 13px; }
+.sb-abilities span { font-size: 13px; color: #2a2318; }
+.statblock .sb-h { text-transform: none; letter-spacing: .01em; }
+.sb-h { margin: 12px 0 4px; padding-bottom: 2px; border-bottom: 1px solid #7a200d; color: #7a200d; font: 600 17px 'Cinzel', Georgia, serif; }
+.statblock .sb-h, .statblock h4.sb-h { color: #7a200d; font: 600 17px 'Cinzel', Georgia, serif; }
+.sb-text p { margin: 0 0 6px; line-height: 1.45; }
+.sb-lead { font-style: italic; }
+.sb-preview { margin-bottom: 8px; }
+.row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.row6 { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.row6 label { font-size: 11px; }
+.ed-body .row6 input { padding: 7px 4px; text-align: center; }
+.party-kicked { display: flex; align-items: center; gap: 8px; padding: 4px 8px; }
+
 /* Fog brush cursor */
 #brush-cursor { position: absolute; z-index: 4; display: none; width: 90px; height: 90px; transform: translate(-50%, -50%); border: 2px solid rgba(232, 176, 74, .9); border-radius: 50%; background: rgba(232, 176, 74, .12); pointer-events: none; }
 #brush-cursor.erase { border-color: rgba(255, 255, 255, .9); border-style: dashed; background: rgba(255, 255, 255, .08); }
