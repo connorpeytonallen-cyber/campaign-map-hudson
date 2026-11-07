@@ -417,8 +417,8 @@
     const at = layers.findIndex((l) => l.id === 'roads-minor');
     layers.splice(at, 0, { id: 'regions-fill', type: 'fill', source: 'regions', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.16 } });
     layers.push(
-      { id: 'fog-haze', type: 'line', source: 'fog', filter: ['==', ['get', 'active'], true], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#1e1e24', 'line-width': 90, 'line-blur': 80, 'line-opacity': 0.55 } },
-      { id: 'fog-edge', type: 'line', source: 'fog', filter: ['==', ['get', 'active'], true], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#1c1c21', 'line-width': 34, 'line-blur': 28, 'line-opacity': 0.9 } },
+      { id: 'fog-haze', type: 'line', source: 'fog-soft', filter: ['==', ['get', 'active'], true], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#1e1e24', 'line-width': 90, 'line-blur': 80, 'line-opacity': 0.55 } },
+      { id: 'fog-edge', type: 'line', source: 'fog-soft', filter: ['==', ['get', 'active'], true], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#1c1c21', 'line-width': 34, 'line-blur': 28, 'line-opacity': 0.9 } },
       { id: 'fog-fill', type: 'fill', source: 'fog', filter: ['==', ['get', 'active'], true], paint: { 'fill-pattern': 'fog-tex', 'fill-opacity': 0.98 } },
       { id: 'fog-wisp', type: 'fill', source: 'fog', filter: ['==', ['get', 'active'], true], paint: { 'fill-pattern': 'fog-wisp', 'fill-opacity': 1, 'fill-opacity-transition': { duration: 0, delay: 0 } } },
       { id: 'fog-line', type: 'line', source: 'fog', layout: { visibility: 'none', 'line-join': 'round' }, paint: { 'line-color': '#c9c3b5', 'line-width': 1.5, 'line-dasharray': [2, 2], 'line-opacity': ['case', ['get', 'active'], 0.8, 0.4] } }
@@ -432,11 +432,12 @@
     // Region outlines go under the fog; the drawing preview stays on top of everything.
     const rl = layers.findIndex((l) => l.id === 'regions-line'), fe = layers.findIndex((l) => l.id === 'fog-haze');
     layers.splice(fe, 0, layers.splice(rl, 1)[0]);
-    return { version: 8, sources: { base: source, regions: { type: 'geojson', data: empty }, fog: { type: 'geojson', data: empty }, draft: { type: 'geojson', data: empty } }, layers };
+    return { version: 8, sources: { base: source, regions: { type: 'geojson', data: empty }, fog: { type: 'geojson', data: empty }, 'fog-soft': { type: 'geojson', data: empty, tolerance: 8, buffer: 256 }, draft: { type: 'geojson', data: empty } }, layers };
   }
 
   // ===== App state =====
   let map, popup, published, data, panel = null, styleReady = false;
+  let publishedStr = '', publishedRef = null; // remembered so each check for updates is cheap
   let editing = false, busy = false, mode = null; // mode: {type:'pin'} | {type:'quest', id} | {type:'region', points, editId}
   let popupKey = null, currentView = 'list', selectedId = null, saveTimer = null;
   let pageLocId = null, pageTab = 'overview', logTab = 'character';
@@ -487,13 +488,23 @@
     map.on('mouseup', brushUp); map.on('touchend', brushUp);
     window.addEventListener('mouseup', brushUp);
     map.getContainer().addEventListener('mouseleave', () => { const c = $('#brush-cursor'); if (c) c.style.display = 'none'; });
-    map.on('zoom', () => { fitRegionLabels(); fitStickers(); });
+    // Resize region names and stickers at most once per frame while zooming.
+    let zoomQueued = false;
+    map.on('zoom', () => { if (zoomQueued) return; zoomQueued = true; requestAnimationFrame(() => { zoomQueued = false; fitRegionLabels(); fitStickers(); }); });
     map.on('resize', () => { lockZoom(); fitRegionLabels(); });
-    if (document.fonts) document.fonts.addEventListener('loadingdone', fitRegionLabels);
+    if (document.fonts) document.fonts.addEventListener('loadingdone', () => { perCache.clear(); fitRegionLabels(); });
+    // Pointer cursor over regions; checked at most once per frame.
+    let hoverPt = null;
     map.on('mousemove', (e) => {
       if (!styleReady || mode) return;
-      const hit = map.queryRenderedFeatures(e.point, { layers: ['regions-fill'] }).length > 0;
-      map.getCanvas().style.cursor = hit ? 'pointer' : '';
+      if (hoverPt) { hoverPt = e.point; return; }
+      hoverPt = e.point;
+      requestAnimationFrame(() => {
+        const p = hoverPt; hoverPt = null;
+        if (!p || mode || map.isMoving()) return;
+        const hit = map.queryRenderedFeatures(p, { layers: ['regions-fill'] }).length > 0;
+        map.getCanvas().style.cursor = hit ? 'pointer' : '';
+      });
     });
 
     $('#lightbox').addEventListener('click', () => { $('#lightbox').hidden = true; });
@@ -649,7 +660,16 @@
     const st = data.fogStyle, breathe = st.pulse ? 0.65 + 0.35 * Math.sin(fogFx.t * 0.7) : 1;
     try { map.setPaintProperty('fog-wisp', 'fill-opacity', (editing ? 0.35 : 1) * breathe); } catch (e) { /* busy */ }
   }
-  const fogMoving = () => styleReady && (data.fogStyle.speed > 0 || data.fogStyle.pulse) && data.fog.some((f) => f.active && f.shape);
+  // Go easy on slower phones and laptops, and respect "reduce motion" settings.
+  const LOW_POWER = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 4 || matchMedia('(pointer: coarse)').matches;
+  const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const FOG_FRAME_MS = LOW_POWER ? 100 : 66; // 10 or 15 frames a second is plenty for drifting fog
+  const fogMoving = () => styleReady && !REDUCED_MOTION && (data.fogStyle.speed > 0 || data.fogStyle.pulse) && data.fog.some((f) => f.active && f.shape);
+  // Only animate when some fog is actually on screen.
+  function fogOnScreen() {
+    const b = map.getBounds(), w = b.getWest(), s = b.getSouth(), e = b.getEast(), n = b.getNorth();
+    return fogBoxes.some((x) => x[0] <= e && x[2] >= w && x[1] <= n && x[3] >= s);
+  }
   function startFogAnim() {
     if (fogFx.raf || !fogMoving()) return;
     fogFx.last = 0;
@@ -659,9 +679,12 @@
     fogFx.raf = 0;
     if (!fogMoving()) return;
     fogFx.raf = requestAnimationFrame(fogTick);
-    if (fogFx.last && now - fogFx.last < 50) return; // about 20 frames a second is plenty for drifting fog
+    if (fogFx.last && now - fogFx.last < FOG_FRAME_MS) return;
     const dt = fogFx.last ? Math.min(0.25, (now - fogFx.last) / 1000) : 0;
-    fogFx.last = now; fogFx.t += dt;
+    fogFx.last = now;
+    // Pause while someone pans or zooms (keeps dragging smooth), or when no fog is in view.
+    if (map.isMoving() || !fogOnScreen()) return;
+    fogFx.t += dt;
     const st = data.fogStyle;
     if (st.speed > 0) {
       const v = st.speed * 5, a = st.dir * Math.PI / 180, a2 = a + 0.5;
@@ -683,12 +706,34 @@
   // Is this spot hidden from players?
   const inShape = (shape, x, y) => !!shape && shape.some((poly) => inRing(poly[0], x, y) && !poly.slice(1).some((hole) => inRing(hole, x, y)));
   const fogged = (lng, lat) => !editing && activeFog().some((f) => inShape(f.shape, lng, lat));
+  // Round off the sharp notches where brush strokes meet (Chaikin corner cutting).
+  // The soft glow around the fog is drawn along this smoothed outline, so it can't fan out into spikes.
+  function smoothRing(ring, passes) {
+    let r = ring.slice(0, -1);
+    for (let p = 0; p < passes && r.length > 2; p++) {
+      const out = [];
+      for (let i = 0; i < r.length; i++) {
+        const [x0, y0] = r[i], [x1, y1] = r[(i + 1) % r.length];
+        out.push([x0 * 0.75 + x1 * 0.25, y0 * 0.75 + y1 * 0.25], [x0 * 0.25 + x1 * 0.75, y0 * 0.25 + y1 * 0.75]);
+      }
+      r = out;
+    }
+    r.push(r[0]);
+    return r;
+  }
+  let fogBoxes = [];
   function renderFog() {
     if (!styleReady) return;
+    const shaped = data.fog.filter((f) => f.shape);
     map.getSource('fog').setData({
       type: 'FeatureCollection',
-      features: data.fog.filter((f) => f.shape).map((f) => ({ type: 'Feature', properties: { id: f.id, active: f.active }, geometry: { type: 'MultiPolygon', coordinates: f.shape } }))
+      features: shaped.map((f) => ({ type: 'Feature', properties: { id: f.id, active: f.active }, geometry: { type: 'MultiPolygon', coordinates: f.shape } }))
     });
+    map.getSource('fog-soft').setData({
+      type: 'FeatureCollection',
+      features: shaped.filter((f) => f.active).map((f) => ({ type: 'Feature', properties: { active: true }, geometry: { type: 'MultiLineString', coordinates: f.shape.flatMap((poly) => poly.map((ring) => smoothRing(ring, 2))) } }))
+    });
+    fogBoxes = shaped.filter((f) => f.active).map((f) => ringBox(f.shape.flatMap((p) => p[0])));
     applyFogLook();
   }
   // Players see thick fog with soft edges; you see it see-through with an outline.
@@ -729,7 +774,10 @@
     const raw = await loadDataScript();
     if (!raw || editing) return;
     const fresh = normalize(raw);
-    if (JSON.stringify(fresh) === JSON.stringify(published)) return;
+    if (publishedRef !== published) { publishedRef = published; publishedStr = JSON.stringify(published); }
+    const freshStr = JSON.stringify(fresh);
+    if (freshStr === publishedStr) return;
+    publishedStr = freshStr; publishedRef = fresh;
     const before = new Set(visibleQuests(published).map((q) => q.id));
     published = fresh;
     data = clone(fresh);
@@ -804,15 +852,11 @@
     b.appendChild(label);
     // A pin set to show through fog: players see a faded, foggy pin they can't open yet.
     const hazy = !editing && loc.throughFog && fogged(loc.lng, loc.lat);
-    if (hazy) {
-      b.classList.add('in-fog');
-      b.setAttribute('aria-label', 'Something lies in the fog');
-      label.textContent = 'Unexplored';
-    }
+    if (hazy) b.classList.add('in-fog');
     b.addEventListener('click', (e) => {
       e.stopPropagation();
       if (editing) selectPin(loc.id);
-      else if (hazy) toast('That place is still hidden in the fog.', 'info', 3000);
+      else if (hazy) openFoggedPopup(loc);
       else if (big) openPage(loc);
       else openPopup(loc);
     });
@@ -1056,14 +1100,20 @@
   }
   // Size each region's name to fit inside the region at the current zoom.
   const measureCtx = document.createElement('canvas').getContext('2d');
+  const perCache = new Map(); // text widths, measured once per name and font
   function fitRegionLabels() {
     if (!map) return;
     for (const { d, r, box } of labelMeta.values()) {
       const a = map.project([box[0], box[3]]), b = map.project([box[2], box[1]]);
       const w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y);
       const text = r.name.toUpperCase();
-      measureCtx.font = `700 100px ${fontStack(r.font)}`;
-      const per1 = measureCtx.measureText(text).width / 100 + 0.2 * text.length; // width per 1px of font size (incl. letter spacing)
+      const mk = r.font + '|' + text;
+      let per1 = perCache.get(mk);
+      if (per1 == null) {
+        measureCtx.font = `700 100px ${fontStack(r.font)}`;
+        per1 = measureCtx.measureText(text).width / 100 + 0.2 * text.length; // width per 1px of font size (incl. letter spacing)
+        perCache.set(mk, per1);
+      }
       const size = Math.min((w * 0.82) / per1, h * 0.42, REGION_SIZES[r.size]) * (r.labelScale || 1);
       d.style.display = size < 7 ? 'none' : '';
       d.style.fontSize = Math.max(7, size).toFixed(1) + 'px';
@@ -1125,6 +1175,15 @@
       title: loc.name || 'Untitled place', kicker: loc.kind === 'settlement' ? 'Settlement' : '',
       titleFont: loc.titleFont || d.titleFont, bodyFont: loc.bodyFont || d.bodyFont,
       color: loc.color || d.color, size: loc.textSize || d.textSize, image: loc.image, description: loc.description, extra
+    }), pinSize(loc)[1] + 2);
+  }
+  // A pin still in the fog: players learn its name, nothing more.
+  function openFoggedPopup(loc) {
+    const d = data.defaults;
+    showPopup('loc:' + loc.id, [loc.lng, loc.lat], card({
+      title: loc.name || 'Untitled place', kicker: 'Still in the fog',
+      titleFont: loc.titleFont || d.titleFont, bodyFont: loc.bodyFont || d.bodyFont,
+      color: loc.color || d.color, size: loc.textSize || d.textSize, description: '…'
     }), pinSize(loc)[1] + 2);
   }
   function questMeta(q) {
