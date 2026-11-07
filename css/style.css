@@ -155,6 +155,9 @@ body.editing .region-label:hover { outline: 1px dashed rgba(255, 255, 255, .5); 
 .sticker img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .pin, .qmarker { z-index: 2; }
 .maplibregl-popup { z-index: 10; }
+.pin.in-fog { opacity: .55; filter: blur(1.6px) grayscale(.85) brightness(.8) drop-shadow(0 0 6px rgba(200, 200, 215, .35)); cursor: help; }
+.pin.in-fog:hover svg { transform: none; }
+.pin.in-fog .pin-label { filter: none; font-style: italic; }
 body.editing .sticker { pointer-events: auto; cursor: grab; }
 body.editing .sticker:hover, .sticker.selected { outline: 1px dashed rgba(232, 176, 74, .8); outline-offset: 2px; }
 .sticker-lib { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }

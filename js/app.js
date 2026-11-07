@@ -294,6 +294,7 @@
         textSize: SIZES[l.textSize] ? l.textSize : '',
         color: safeColor(l.color, ''), image: safeImageSrc(l.image),
         symbol: SYMBOLS[l.symbol] ? l.symbol : '', symbolColor: safeColor(l.symbolColor, ''), scale: clampScale(l.scale),
+        throughFog: !!l.throughFog,
         shops: arr(l.shops).filter(Boolean).map((s) => ({
           id: str(s.id) || uid(), name: str(s.name), keeper: str(s.keeper), description: str(s.description),
           items: str(s.items), image: safeImageSrc(s.image)
@@ -394,10 +395,10 @@
     const at = layers.findIndex((l) => l.id === 'roads-minor');
     layers.splice(at, 0, { id: 'regions-fill', type: 'fill', source: 'regions', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.16 } });
     layers.push(
-      { id: 'fog-haze', type: 'line', source: 'fog', filter: ['==', ['get', 'active'], true], paint: { 'line-color': '#1e1e24', 'line-width': 90, 'line-blur': 80, 'line-opacity': 0.55 } },
-      { id: 'fog-edge', type: 'line', source: 'fog', filter: ['==', ['get', 'active'], true], paint: { 'line-color': '#1c1c21', 'line-width': 34, 'line-blur': 28, 'line-opacity': 0.9 } },
+      { id: 'fog-haze', type: 'line', source: 'fog', filter: ['==', ['get', 'active'], true], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#1e1e24', 'line-width': 90, 'line-blur': 80, 'line-opacity': 0.55 } },
+      { id: 'fog-edge', type: 'line', source: 'fog', filter: ['==', ['get', 'active'], true], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#1c1c21', 'line-width': 34, 'line-blur': 28, 'line-opacity': 0.9 } },
       { id: 'fog-fill', type: 'fill', source: 'fog', filter: ['==', ['get', 'active'], true], paint: { 'fill-pattern': 'fog-tex', 'fill-opacity': 0.98 } },
-      { id: 'fog-line', type: 'line', source: 'fog', layout: { visibility: 'none' }, paint: { 'line-color': '#c9c3b5', 'line-width': 1.5, 'line-dasharray': [2, 2], 'line-opacity': ['case', ['get', 'active'], 0.8, 0.4] } }
+      { id: 'fog-line', type: 'line', source: 'fog', layout: { visibility: 'none', 'line-join': 'round' }, paint: { 'line-color': '#c9c3b5', 'line-width': 1.5, 'line-dasharray': [2, 2], 'line-opacity': ['case', ['get', 'active'], 0.8, 0.4] } }
     );
     layers.push(
       { id: 'regions-line', type: 'line', source: 'regions', paint: { 'line-color': ['get', 'color'], 'line-width': 1.8, 'line-opacity': 0.85, 'line-dasharray': [3, 2] } },
@@ -683,9 +684,17 @@
       label.style.bottom = (h + 6) + 'px';
     }
     b.appendChild(label);
+    // A pin set to show through fog: players see a faded, foggy pin they can't open yet.
+    const hazy = !editing && loc.throughFog && fogged(loc.lng, loc.lat);
+    if (hazy) {
+      b.classList.add('in-fog');
+      b.setAttribute('aria-label', 'Something lies in the fog');
+      label.textContent = 'Unexplored';
+    }
     b.addEventListener('click', (e) => {
       e.stopPropagation();
       if (editing) selectPin(loc.id);
+      else if (hazy) toast('That place is still hidden in the fog.', 'info', 3000);
       else if (big) openPage(loc);
       else openPopup(loc);
     });
@@ -703,7 +712,7 @@
   function renderMarkers() {
     for (const m of markers.values()) m.remove();
     markers.clear();
-    data.locations.filter((l) => !fogged(l.lng, l.lat)).forEach(addMarker);
+    data.locations.filter((l) => l.throughFog || !fogged(l.lng, l.lat)).forEach(addMarker);
     highlight(popupKey || (pageLocId ? 'loc:' + pageLocId : null));
   }
   function highlight(key) {
@@ -2855,6 +2864,13 @@
     colorPicker(scBox, safeColor(loc.symbolColor, '#141414'), (c) => { loc.symbolColor = c; refresh(); }, SYMBOL_COLORS);
     b.appendChild(sc);
     b.appendChild(sizeField(loc.scale, (v) => { loc.scale = v; refresh(); }));
+    const tf = el('label', 'check');
+    const tfc = el('input');
+    tfc.type = 'checkbox'; tfc.checked = loc.throughFog;
+    tfc.onchange = () => { loc.throughFog = tfc.checked; refresh(); };
+    tf.appendChild(tfc);
+    tf.appendChild(document.createTextNode(' Visible through fog (players see a faded, foggy pin they can’t open until you lift the fog)'));
+    b.appendChild(tf);
     b.appendChild(imageField(loc, refresh, loc.kind === 'settlement' ? 'Main picture (optional)' : 'Image (optional)'));
 
     if (loc.kind === 'settlement') {
