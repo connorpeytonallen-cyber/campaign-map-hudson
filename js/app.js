@@ -114,6 +114,15 @@
     return '';
   }
 
+  function safeAudioSrc(src) {
+    if (typeof src !== 'string') return '';
+    src = src.trim();
+    if (/^data:audio\/(mpeg|mp3|wav|x-wav|ogg|mp4|x-m4a|aac|webm);base64,/i.test(src)) return src;
+    if (/^https:\/\/\S+$/i.test(src)) return src;
+    if (/^[\w\-./]+$/.test(src) && !src.includes('..') && !src.startsWith('/')) return src;
+    return '';
+  }
+
   const loadedFonts = new Set();
   function loadFont(name) {
     const f = fontInfo(name);
@@ -223,8 +232,18 @@
       quests: [],
       fog: [],
       stickers: [],
-      monsters: []
+      monsters: [],
+      sounds: []
     };
+    for (const s of arr(d.sounds)) {
+      if (!s) continue;
+      const audio = safeAudioSrc(s.audio);
+      if (!audio) continue;
+      out.sounds.push({
+        id: str(s.id) || uid(), name: str(s.name) || 'Sound', audio, loop: !!s.loop,
+        volume: Math.min(1, Math.max(0.05, num(s.volume) == null ? 0.8 : num(s.volume)))
+      });
+    }
     for (const m of arr(d.monsters)) {
       if (!m) continue;
       const score = (v) => Math.min(30, Math.max(1, Math.round(num(v) || 10)));
@@ -541,6 +560,7 @@
   }
 
   function renderAll() {
+    renderSoundCtl();
     renderFog();
     renderStickers();
     renderMarkers();
@@ -1262,7 +1282,7 @@
     } catch (e) { relayState = 'offline'; renderParty(); return; }
     relay.on('connect', () => {
       relayState = 'live';
-      relay.subscribe([`${ROOM}/p/+`, `${ROOM}/rename/${me.id}`, `${ROOM}/dice/log`, `${ROOM}/kick/+`]);
+      relay.subscribe([`${ROOM}/p/+`, `${ROOM}/rename/${me.id}`, `${ROOM}/dice/log`, `${ROOM}/kick/+`, `${ROOM}/sound`, `${ROOM}/sound/state`]);
       announce();
       renderParty();
     });
@@ -1280,6 +1300,7 @@
     const txt = payload.toString();
     if (topic === `${ROOM}/dice/log`) { if (!isKicked() && txt) onDiceMessage(txt); return; }
     if (topic.startsWith(`${ROOM}/kick/`)) { onKickMessage(topic.split('/').pop(), txt); return; }
+    if (topic === `${ROOM}/sound` || topic === `${ROOM}/sound/state`) { onSoundMessage(topic, txt); return; }
     if (topic === `${ROOM}/rename/${me.id}`) {
       if (!txt) return;
       try {
@@ -1326,6 +1347,8 @@
         try { relay.unsubscribe([`${ROOM}/p/+`, `${ROOM}/dice/log`], () => relay.subscribe([`${ROOM}/p/+`, `${ROOM}/dice/log`])); } catch (e) { /* ignore */ }
       }
       renderDice();
+      renderSoundCtl();
+      if (isKicked()) stopAllLocal();
     }
     renderParty();
   }
@@ -1695,11 +1718,178 @@
     }
   }
 
+  // ===== Soundboard: the DM plays sounds on everyone's map =====
+  const SOUND_PREFS_KEY = 'campaign-map.sound', MAX_AUDIO_MB = 8, LOOP_STATE_MAX_AGE = 6 * 3600 * 1000;
+  let soundOn = false, remoteLoops = [];
+  let soundPrefs = Object.assign({ volume: 0.8, muted: false }, lsGet(SOUND_PREFS_KEY, {}));
+  const loops = new Map();          // sound id -> looping Audio
+  const oneShots = new Set();       // one-shot Audio elements still playing
+  const activeLoopIds = new Set();  // loops the DM has running
+  const soundById = (id) => data.sounds.find((s) => s.id === id) || published.sounds.find((s) => s.id === id);
+  const outVol = (s) => (soundPrefs.muted ? 0 : Math.max(0, Math.min(1, s.volume * soundPrefs.volume)));
+  function playLocal(id) {
+    const s = soundById(id);
+    if (!s || (!soundOn && !editing)) return;
+    const src = resolveImage(s.audio);
+    if (s.loop) {
+      let a = loops.get(id);
+      if (!a) { a = new Audio(src); a.loop = true; loops.set(id, a); }
+      a.volume = outVol(s);
+      a.play().catch(() => {});
+    } else {
+      const a = new Audio(src);
+      a.volume = outVol(s);
+      oneShots.add(a);
+      a.addEventListener('ended', () => oneShots.delete(a));
+      a.play().catch(() => oneShots.delete(a));
+    }
+  }
+  function stopLocal(id) { const a = loops.get(id); if (a) { a.pause(); loops.delete(id); } }
+  function stopAllLocal() {
+    for (const a of loops.values()) a.pause();
+    loops.clear();
+    for (const a of oneShots) a.pause();
+    oneShots.clear();
+  }
+  function applyVolumes() { for (const [id, a] of loops) { const s = soundById(id); if (s) a.volume = outVol(s); } }
+  function syncLoops() {
+    for (const id of [...loops.keys()]) if (!remoteLoops.includes(id)) stopLocal(id);
+    for (const id of remoteLoops) if (!loops.has(id)) playLocal(id);
+  }
+  function sendSound(m) { if (relay && relay.connected) relay.publish(`${ROOM}/sound`, JSON.stringify(Object.assign({ ts: Date.now() }, m))); }
+  function publishLoopState() {
+    if (relay && relay.connected) relay.publish(`${ROOM}/sound/state`, JSON.stringify({ loops: [...activeLoopIds], ts: Date.now() }), { retain: true });
+  }
+  function onSoundMessage(topic, txt) {
+    if (isKicked() || !txt) return;
+    let m;
+    try { m = JSON.parse(txt); } catch (e) { return; }
+    if (topic.endsWith('/sound/state')) {
+      const fresh = Date.now() - (num(m.ts) || 0) < LOOP_STATE_MAX_AGE;
+      remoteLoops = fresh ? arr(m.loops).filter((x) => typeof x === 'string') : [];
+      if (editing) { activeLoopIds.clear(); remoteLoops.forEach((id) => activeLoopIds.add(id)); refreshSoundRows(); }
+      syncLoops();
+      return;
+    }
+    if (editing) return; // the DM already heard it
+    if (m.action === 'play' && Date.now() - (num(m.ts) || 0) < 30000) playLocal(str(m.id));
+    if (m.action === 'stopall') stopAllLocal();
+  }
+  // DM controls
+  function dmPlay(s) {
+    if (!published.sounds.some((p) => p.id === s.id && p.audio === s.audio)) toast('Only you can hear this one until you Publish, because players don’t have it yet.', 'warn', 6000);
+    playLocal(s.id);
+    if (s.loop) { activeLoopIds.add(s.id); publishLoopState(); } else sendSound({ action: 'play', id: s.id });
+    refreshSoundRows();
+  }
+  function dmStop(s) { stopLocal(s.id); activeLoopIds.delete(s.id); publishLoopState(); refreshSoundRows(); }
+  function dmStopAll() { stopAllLocal(); activeLoopIds.clear(); publishLoopState(); sendSound({ action: 'stopall' }); refreshSoundRows(); }
+  // Players' sound control (top right, under the Logbook)
+  function renderSoundCtl() {
+    const box = $('#sound-ctl');
+    if (!box) return;
+    box.innerHTML = '';
+    if (editing || !published.sounds.length || isKicked()) { box.hidden = true; return; }
+    box.hidden = false;
+    if (!soundOn) {
+      box.appendChild(btn('Enable sound', 'small', () => { soundOn = true; renderSoundCtl(); syncLoops(); }));
+      return;
+    }
+    const mute = btn(soundPrefs.muted ? 'Unmute' : 'Mute', 'small ghost', () => {
+      soundPrefs.muted = !soundPrefs.muted; lsSet(SOUND_PREFS_KEY, soundPrefs); applyVolumes(); renderSoundCtl();
+    });
+    box.appendChild(el('span', 'sound-label', 'Sound'));
+    const r = el('input');
+    r.type = 'range'; r.min = '0'; r.max = '1'; r.step = '0.05'; r.value = String(soundPrefs.volume);
+    r.setAttribute('aria-label', 'Volume');
+    r.oninput = () => { soundPrefs.volume = +r.value; lsSet(SOUND_PREFS_KEY, soundPrefs); applyVolumes(); };
+    box.appendChild(r);
+    box.appendChild(mute);
+  }
+  function readFileAsDataURL(file) {
+    return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => rej(fr.error); fr.readAsDataURL(file); });
+  }
+  function showSounds() {
+    currentView = 'sounds'; selectedId = null; setTab('sounds'); updateStatus(); popup.remove();
+    const b = body();
+    const top = el('div', 'btn-row');
+    const up = el('label', 'btn primary', 'Upload MP3s…');
+    up.style.margin = '0'; up.style.color = '#141414';
+    const file = el('input');
+    file.type = 'file'; file.accept = 'audio/*,.mp3'; file.multiple = true; file.hidden = true;
+    file.onchange = async () => {
+      const list = [...file.files];
+      file.value = '';
+      for (const f of list) {
+        if (f.size > MAX_AUDIO_MB * 1024 * 1024) { toast(`${f.name} is over ${MAX_AUDIO_MB} MB. Try a shorter clip or a lower quality MP3.`, 'warn', 7000); continue; }
+        try {
+          let url = await readFileAsDataURL(f);
+          if (/^data:(application\/octet-stream|);base64,/.test(url)) url = url.replace(/^data:[^;]*;/, 'data:audio/mpeg;');
+          if (!safeAudioSrc(url)) { toast(`${f.name} isn’t an audio file this map can play.`, 'warn'); continue; }
+          data.sounds.push({ id: uid(), name: f.name.replace(/\.[^.]+$/, '').slice(0, 40), audio: url, loop: false, volume: 0.8 });
+        } catch (e) { toast(`Couldn’t read ${f.name}.`, 'error'); }
+      }
+      changed();
+      showSounds();
+    };
+    up.appendChild(file);
+    top.appendChild(up);
+    top.appendChild(btn('Stop all', 'small', dmStopAll));
+    b.appendChild(top);
+    b.appendChild(el('p', 'tip', `Press Play during the session and it plays on every open map. Loops keep going (and start for anyone who joins) until you stop them. Publish after adding sounds so players get them. Up to ${MAX_AUDIO_MB} MB per file.`));
+    if (!data.sounds.length) { b.appendChild(el('p', 'muted', 'No sounds yet. Upload some MP3s to start.')); return; }
+    const list = el('div', 'sound-list');
+    data.sounds.forEach((s) => list.appendChild(soundRow(s)));
+    b.appendChild(list);
+    refreshSoundRows();
+  }
+  function soundRow(s) {
+    const row = el('div', 'sound-row');
+    row.dataset.id = s.id;
+    const play = btn('', 'small sound-play', () => { if (s.loop && activeLoopIds.has(s.id)) dmStop(s); else dmPlay(s); });
+    row.appendChild(play);
+    const name = el('input', 'sound-name');
+    name.value = s.name; name.maxLength = 40;
+    name.oninput = () => { s.name = name.value; changed(); };
+    row.appendChild(name);
+    const opts = el('div', 'sound-opts');
+    const ll = el('label', 'check');
+    const lc = el('input');
+    lc.type = 'checkbox'; lc.checked = s.loop;
+    lc.onchange = () => { if (activeLoopIds.has(s.id)) dmStop(s); s.loop = lc.checked; changed(); refreshSoundRows(); };
+    ll.appendChild(lc); ll.appendChild(document.createTextNode(' Loop'));
+    opts.appendChild(ll);
+    const v = el('input');
+    v.type = 'range'; v.min = '0.05'; v.max = '1'; v.step = '0.05'; v.value = String(s.volume);
+    v.title = 'Volume';
+    v.oninput = () => { s.volume = +v.value; applyVolumes(); changed(); };
+    opts.appendChild(v);
+    opts.appendChild(btn('Delete', 'small danger', async () => {
+      if (!(await ask(`Delete the sound “${s.name}”?`, 'Delete', 'Keep it'))) return;
+      dmStop(s);
+      data.sounds = data.sounds.filter((x) => x !== s); changed(); showSounds();
+    }));
+    row.appendChild(opts);
+    if (!published.sounds.some((p) => p.id === s.id && p.audio === s.audio)) row.appendChild(el('div', 'tip sound-new', 'New: Publish so players can hear it.'));
+    return row;
+  }
+  function refreshSoundRows() {
+    document.querySelectorAll('.sound-row').forEach((row) => {
+      const s = data.sounds.find((x) => x.id === row.dataset.id);
+      if (!s) return;
+      const playing = s.loop && activeLoopIds.has(s.id);
+      const b = row.querySelector('.sound-play');
+      b.textContent = playing ? 'Stop' : 'Play';
+      b.classList.toggle('accent', playing);
+      row.classList.toggle('playing', playing);
+    });
+  }
+
   // ===== Editor =====
   const PANEL_HTML = `
     <div class="ed-head"><div class="ed-title">Map editor</div><div class="ed-status" id="ed-status"></div></div>
     <div class="ed-actions"><button type="button" class="btn accent" id="ed-publish">Publish</button></div>
-    <div class="ed-tabs"><button type="button" data-tab="list">Pins</button><button type="button" data-tab="regions">Regions</button><button type="button" data-tab="quests">Quests</button><button type="button" data-tab="fog">Fog</button><button type="button" data-tab="stickers">Stickers</button><button type="button" data-tab="monsters">Monsters</button><button type="button" data-tab="settings">Settings</button></div>
+    <div class="ed-tabs"><button type="button" data-tab="list">Pins</button><button type="button" data-tab="regions">Regions</button><button type="button" data-tab="quests">Quests</button><button type="button" data-tab="fog">Fog</button><button type="button" data-tab="stickers">Stickers</button><button type="button" data-tab="monsters">Monsters</button><button type="button" data-tab="sounds">Sounds</button><button type="button" data-tab="settings">Settings</button></div>
     <div class="ed-body" id="ed-body"></div>
     <div class="ed-foot"><span class="muted small">Only you can publish changes.</span>
       <button type="button" class="btn ghost small" id="ed-exit">Exit editor</button></div>`;
@@ -1772,7 +1962,7 @@
     popup.remove();
     renderAll();
     showList();
-    announce(); renderParty(); renderDice();
+    announce(); renderParty(); renderDice(); renderSoundCtl();
   }
 
   function exitEdit() {
@@ -1786,7 +1976,7 @@
     popup.remove();
     renderAll();
     map.resize();
-    announce(); renderParty(); renderDice();
+    announce(); renderParty(); renderDice(); renderSoundCtl();
     if (hadChanges) toast('Your unpublished changes are saved on this device. Open #edit again to finish and publish.', 'info', 7000);
   }
 
@@ -1820,6 +2010,7 @@
     else if (tab === 'fog') showFog();
     else if (tab === 'stickers') showStickers();
     else if (tab === 'monsters') showMonsters();
+    else if (tab === 'sounds') showSounds();
     else if (tab === 'settings') showSettings();
     else showList();
   }
@@ -1839,6 +2030,7 @@
     else if (currentView === 'sticker' && byStickerId(selectedId)) showStickerForm(byStickerId(selectedId));
     else if (currentView === 'monster' && byMonster(selectedId)) showMonsterForm(byMonster(selectedId));
     else if (currentView === 'monsters' || currentView === 'monster') showMonsters();
+    else if (currentView === 'sounds') showSounds();
     else if (currentView === 'stickers' || currentView === 'sticker') showStickers();
     else if (currentView === 'fog' || currentView === 'fogarea' || currentView === 'brush') showFog();
     else if (currentView === 'settings') showSettings();
@@ -2970,6 +3162,16 @@
     if (!node || typeof node !== 'object') return;
     for (const k of Object.keys(node)) {
       const v = node[k];
+      if (k === 'audio' && typeof v === 'string') {
+        const am = /^data:(audio\/[a-z0-9.+-]+);base64,(.+)$/i.exec(v);
+        if (!am) continue;
+        const aext = ({ 'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/aac': 'aac', 'audio/webm': 'webm' })[am[1].toLowerCase()] || 'mp3';
+        const apath = `sounds/${node.id || uid()}-${Date.now().toString(36)}${files.length}.${aext}`;
+        files.push({ path: apath, base64: am[2] });
+        imageCache[apath] = v;
+        node[k] = apath;
+        continue;
+      }
       if (k === 'image' && typeof v === 'string') {
         const m = /^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i.exec(v);
         if (!m) continue;

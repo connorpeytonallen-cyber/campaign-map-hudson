@@ -255,6 +255,22 @@ body.editing #dice { right: 374px; }
 .ed-body .row6 input { padding: 7px 4px; text-align: center; }
 .party-kicked { display: flex; align-items: center; gap: 8px; padding: 4px 8px; }
 
+/* Soundboard */
+#sound-ctl { position: fixed; top: 62px; right: 14px; z-index: 15; display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 10px; border: 1px solid #3a3a41; border-radius: 10px; background: rgba(16, 16, 19, .92); box-shadow: 0 6px 20px rgba(0, 0, 0, .45); color: var(--text); font: 600 13px var(--ui); }
+#sound-ctl[hidden], body.editing #sound-ctl { display: none; }
+#sound-ctl input[type=range] { width: 90px; accent-color: var(--accent); }
+.sound-label { color: var(--muted); font-size: 12px; }
+.sound-list { display: grid; gap: 8px; }
+.sound-row { display: grid; grid-template-columns: auto 1fr; gap: 6px 8px; align-items: center; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #16161a; }
+.sound-row.playing { border-color: var(--accent); }
+.sound-play { min-width: 52px; }
+.ed-body input.sound-name { margin-top: 0; padding: 6px 8px; }
+.sound-opts { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; }
+.sound-opts input[type=range] { flex: 1; accent-color: var(--accent); }
+.ed-body .sound-opts label.check { margin: 0; }
+.sound-new { grid-column: 1 / -1; margin: 0; color: var(--accent); }
+.ed-tabs { flex-wrap: wrap; }
+
 /* Fog brush cursor */
 #brush-cursor { position: absolute; z-index: 4; display: none; width: 90px; height: 90px; transform: translate(-50%, -50%); border: 2px solid rgba(232, 176, 74, .9); border-radius: 50%; background: rgba(232, 176, 74, .12); pointer-events: none; }
 #brush-cursor.erase { border-color: rgba(255, 255, 255, .9); border-style: dashed; background: rgba(255, 255, 255, .08); }
