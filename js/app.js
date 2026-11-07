@@ -1500,7 +1500,6 @@
       try { ta.value = localStorage.getItem(notesKey()) || ''; } catch (e) { /* ignore */ }
       ta.oninput = () => { try { localStorage.setItem(notesKey(), ta.value); } catch (e) { /* ignore */ } };
       body.appendChild(ta);
-      body.appendChild(el('p', 'meta', 'Your notes are private. They’re saved only in this browser on this device.'));
     }
     scroll.appendChild(body);
     requestAnimationFrame(() => { scroll.scrollTop = keepScroll; });
@@ -1722,24 +1721,65 @@
     const inp = $('#party .party-edit input');
     if (inp) { inp.focus(); inp.select(); }
   }
+  // A colour wheel: angle picks the hue, distance from the middle picks how strong the colour is.
+  const WHEEL_L = 60;
+  function hslHex(h, s, l) {
+    s /= 100; l /= 100;
+    const k = (n) => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+    const f = (n) => Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)))).toString(16).padStart(2, '0');
+    return '#' + f(0) + f(8) + f(4);
+  }
+  function hexHueSat(hex) {
+    const [r, g, b] = hexRgb(hex).map((v) => v / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+    let h = 0;
+    if (d) h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    const l = (mx + mn) / 2, s = d ? d / (1 - Math.abs(2 * l - 1)) : 0;
+    return [(h * 60 + 360) % 360, Math.min(1, s)];
+  }
+  function colorWheel(value, onPick) {
+    const wrap = el('div', 'cwheel-row');
+    const wheel = el('div', 'cwheel');
+    const knob = el('span', 'cwheel-knob');
+    const prev = el('span', 'cwheel-prev');
+    wheel.appendChild(knob);
+    wrap.appendChild(wheel);
+    wrap.appendChild(prev);
+    const show = (hex, h, s) => {
+      const a = h * Math.PI / 180;
+      knob.style.left = (50 + Math.sin(a) * s * 50) + '%';
+      knob.style.top = (50 - Math.cos(a) * s * 50) + '%';
+      knob.style.background = hex; prev.style.background = hex; prev.title = hex;
+    };
+    const [h0, s0] = hexHueSat(safeColor(value, '#e8b04a'));
+    show(safeColor(value, '#e8b04a'), h0, s0);
+    const pick = (e) => {
+      const r = wheel.getBoundingClientRect(), pt = e.touches ? e.touches[0] : e;
+      const dx = pt.clientX - (r.left + r.width / 2), dy = pt.clientY - (r.top + r.height / 2);
+      const s = Math.min(1, Math.hypot(dx, dy) / (r.width / 2)), h = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
+      const hex = hslHex(h, Math.round(s * 85), WHEEL_L);
+      show(hex, h, s);
+      onPick(hex);
+    };
+    let down = false;
+    wheel.addEventListener('pointerdown', (e) => { down = true; wheel.setPointerCapture(e.pointerId); pick(e); e.preventDefault(); });
+    wheel.addEventListener('pointermove', (e) => { if (down) pick(e); });
+    wheel.addEventListener('pointerup', () => { down = false; });
+    wheel.addEventListener('pointercancel', () => { down = false; });
+    return wrap;
+  }
   function partyEditorForm(p) {
     const f = el('form', 'party-edit');
     const isMe = p.id === me.id;
-    let color = p.color;
+    // Remember picks while the form is open, so a party update redrawing it doesn't lose them.
+    let color = (partyEdit && partyEdit.color) || p.color;
     const inp = el('input');
     inp.maxLength = 24;
     inp.placeholder = isMe ? 'Your name' : 'Player name';
-    inp.value = p.name;
+    inp.value = partyEdit && partyEdit.name != null ? partyEdit.name : p.name;
     inp.autocomplete = 'off';
+    inp.oninput = () => { if (partyEdit) partyEdit.name = inp.value; };
     f.appendChild(inp);
-    const sw = el('div', 'party-swatches');
-    PIN_COLORS.forEach((c) => {
-      const b = el('button', 'sw' + (c === color ? ' on' : ''));
-      b.type = 'button'; b.style.background = c; b.title = c;
-      b.onclick = () => { color = c; sw.querySelectorAll('.sw').forEach((x) => x.classList.toggle('on', x === b)); };
-      sw.appendChild(b);
-    });
-    f.appendChild(sw);
+    f.appendChild(colorWheel(color, (c) => { color = c; if (partyEdit) partyEdit.color = c; }));
     const row = el('div', 'party-edit-btns');
     if (!isMe && editing) {
       const ab = btn('Abilities', 'small', () => { partyEdit = null; renderParty(); showAbilityEditor(p.id); });
@@ -2387,7 +2427,6 @@
     const text = (key, label, opts) => field(label, textInput(s[key], (v) => { s[key] = v; saveSheet(s); }, opts || {}));
     const section = (title) => body.appendChild(el('div', 'cs-h', title));
 
-    body.appendChild(el('div', 'cs-title', 'Decline of the East'));
     const idg = el('div', 'cs-grid');
     [['player', 'Player name'], ['name', 'Character name'], ['affiliation', 'Affiliation'], ['age', 'Age'], ['height', 'Height'], ['weight', 'Weight']].forEach(([k, l]) => idg.appendChild(text(k, l)));
     const lvl = el('input');
