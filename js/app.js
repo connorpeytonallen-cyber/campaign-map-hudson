@@ -1499,7 +1499,7 @@
   // ===== Dice roller (bottom left): a shared, read-only feed of rolls =====
   const DICE = [4, 6, 8, 10, 12, 20];
   const DICE_LOG_MAX = 60, DICE_OPEN_KEY = 'campaign-map.diceOpen', HIDDEN_KEY = 'campaign-map.hiddenRolls:' + SITE_KEY;
-  let diceLog = [], diceSides = 20, diceCount = 1, diceMod = 0, diceFor = '', diceHidden = false, diceUnread = 0;
+  let diceLog = [], diceSides = 20, diceCount = 1, diceMod = 0, diceFor = '', diceHidden = false, diceUnread = 0, diceClearedAt = 0;
   function rollDie(n) {
     const a = new Uint32Array(1), lim = Math.floor(0x100000000 / n) * n;
     let x;
@@ -1525,7 +1525,7 @@
     let added = 0;
     for (const raw of list) {
       const x = cleanRoll(raw);
-      if (!x || byKey.has(x.id)) continue;
+      if (!x || byKey.has(x.id) || x.ts <= diceClearedAt) continue;
       byKey.set(x.id, x);
       added++;
     }
@@ -1533,13 +1533,23 @@
     return added;
   }
   function publishRolls() {
-    if (relay && relay.connected) relay.publish(`${ROOM}/dice/log`, JSON.stringify(diceLog), { retain: true });
+    if (relay && relay.connected) relay.publish(`${ROOM}/dice/log`, JSON.stringify({ clearedAt: diceClearedAt, rolls: diceLog }), { retain: true });
   }
   function onDiceMessage(txt) {
-    let list = [];
-    try { list = JSON.parse(txt); } catch (e) { return; }
-    if (!Array.isArray(list)) return;
+    let msg;
+    try { msg = JSON.parse(txt); } catch (e) { return; }
+    const list = Array.isArray(msg) ? msg : arr(msg && msg.rolls);
+    const cleared = !Array.isArray(msg) && msg ? num(msg.clearedAt) || 0 : 0;
+    let wiped = false;
+    if (cleared > diceClearedAt) {
+      diceClearedAt = cleared;
+      const before = diceLog.length;
+      diceLog = diceLog.filter((x) => x.ts > diceClearedAt);
+      wiped = diceLog.length !== before;
+      if (wiped) diceUnread = 0;
+    }
     const added = mergeRolls(list);
+    if (wiped && !added) { renderDice(true); return; }
     if (!added) return;
     if (!lsGet(DICE_OPEN_KEY, false)) diceUnread += added;
     renderDice(true);
@@ -1695,6 +1705,16 @@
     hl.appendChild(document.createTextNode(' Hidden'));
     dm.appendChild(hl);
     c.appendChild(dm);
+    const dm2 = el('div', 'dice-row dice-dm');
+    dm2.appendChild(btn('Clear rolls', 'small ghost dice-clear', async () => {
+      if (!(await ask('Clear the dice feed for everyone? Your hidden rolls stay.', 'Clear', 'Cancel'))) return;
+      diceClearedAt = Date.now();
+      diceLog = [];
+      diceUnread = 0;
+      publishRolls();
+      renderDice(true);
+    }));
+    c.appendChild(dm2);
     box.appendChild(c);
   }
   function fillDiceControls() {
@@ -1703,8 +1723,8 @@
     box.querySelectorAll('.die').forEach((b) => b.classList.toggle('on', +b.dataset.sides === diceSides));
     box.querySelector('.dice-n').textContent = String(diceCount);
     box.querySelector('.dice-roll').textContent = (editing && diceHidden ? 'Roll hidden ' : 'Roll ') + diceLabel(diceCount, diceSides, diceMod);
+    box.querySelectorAll('.dice-dm').forEach((row) => { row.hidden = !editing; });
     const dm = box.querySelector('.dice-dm');
-    dm.hidden = !editing;
     if (editing) {
       const sel = dm.querySelector('select');
       const now = Date.now();
