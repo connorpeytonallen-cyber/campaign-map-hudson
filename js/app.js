@@ -416,7 +416,7 @@
   let map, popup, published, data, panel = null, styleReady = false;
   let editing = false, busy = false, mode = null; // mode: {type:'pin'} | {type:'quest', id} | {type:'region', points, editId}
   let popupKey = null, currentView = 'list', selectedId = null, saveTimer = null;
-  let pageLocId = null, pageTab = 'overview', logTab = 'quests';
+  let pageLocId = null, pageTab = 'overview', logTab = 'character';
   const markers = new Map(), qmarkers = new Map(), rlabels = new Map();
   const openCards = new Set();
   const imageCache = {}; // just-published images, shown from memory until the live site catches up
@@ -1186,19 +1186,23 @@
   function renderLog() {
     const lb = $('#logbook');
     if (lb.hidden) return;
+    const old = lb.querySelector('.sheet-scroll');
+    const keepScroll = old && lb.dataset.tab === logTab ? old.scrollTop : 0;
+    lb.dataset.tab = logTab;
     lb.innerHTML = '';
     lb.appendChild(sheetHead('Logbook', () => toggleLog(false)));
     const quests = visibleQuests(data);
     const unseen = new Set(unseenQuests().map((q) => q.id));
     const beasts = data.monsters.filter((m) => m.revealed);
-    const tabs = [['quests', `Quests${unseen.size ? ' (' + unseen.size + ' new)' : ''}`], ['people', 'People']];
+    const tabs = [['character', 'Character'], ['notes', 'My notes'], ['quests', `Quests${unseen.size ? ' (' + unseen.size + ' new)' : ''}`], ['people', 'People']];
     if (beasts.length) tabs.push(['bestiary', 'Bestiary']);
-    tabs.push(['notes', 'My notes']);
-    if (logTab === 'bestiary' && !beasts.length) logTab = 'quests';
+    if (logTab === 'bestiary' && !beasts.length) logTab = 'character';
     lb.appendChild(tabBar(tabs, logTab, (id) => { logTab = id; renderLog(); }));
     const scroll = el('div', 'sheet-scroll');
     const body = el('div', 'tab-body');
-    if (logTab === 'quests') {
+    if (logTab === 'character') {
+      renderCharacter(body);
+    } else if (logTab === 'quests') {
       if (!quests.length) body.appendChild(el('p', 'empty', 'No quests yet. When your DM gives you one, it shows up here.'));
       const groups = [['active', 'Active'], ['done', 'Completed'], ['failed', 'Failed']];
       groups.forEach(([st, label]) => {
@@ -1232,6 +1236,7 @@
       body.appendChild(el('p', 'meta', 'Your notes are private. They’re saved only in this browser on this device.'));
     }
     scroll.appendChild(body);
+    requestAnimationFrame(() => { scroll.scrollTop = keepScroll; });
     lb.appendChild(scroll);
   }
 
@@ -1517,7 +1522,8 @@
     return {
       id: x.id.slice(0, 40), byId: str(x.byId).slice(0, 40), by: cleanName(x.by) || 'Someone', color: safeColor(x.color, PIN_COLORS[0]),
       dm: !!x.dm, forName: cleanName(x.forName), forColor: safeColor(x.forColor, ''), sides, count: results.length, mod, results,
-      total: results.reduce((s, v) => s + v, 0) + mod, ts: num(x.ts) || 0, revealed: !!x.revealed
+      total: results.reduce((s, v) => s + v, 0) + mod, ts: num(x.ts) || 0, revealed: !!x.revealed,
+      label: str(x.label).replace(/\s+/g, ' ').trim().slice(0, 40)
     };
   }
   function mergeRolls(list) {
@@ -1602,6 +1608,7 @@
       who.appendChild(document.createTextNode(' rolled'));
     }
     who.appendChild(document.createTextNode(' ' + diceLabel(e.count, e.sides, e.mod)));
+    if (e.label) who.appendChild(el('span', 'roll-label', ' · ' + e.label));
     if (e.revealed) who.appendChild(el('span', 'roll-tag', 'revealed'));
     if (hidden) who.appendChild(el('span', 'roll-tag dm', 'hidden'));
     body.appendChild(who);
@@ -1903,6 +1910,196 @@
       b.classList.toggle('accent', playing);
       row.classList.toggle('playing', playing);
     });
+  }
+
+  // ===== Character sheet: Decline of the East, P.R.O.W.E.S.S (saved on each player's device) =====
+  const PROWESS = [
+    ['power', 'Power', ['Force', 'Control', 'Impact']],
+    ['reflex', 'Reflex', ['Speed', 'Performance', 'Sleight of Hand']],
+    ['outlook', 'Outlook', ['Sense', 'Insight', 'Evasion']],
+    ['wit', 'Wit', ['Logic', 'Memory', 'History']],
+    ['endurance', 'Endurance', ['Vitality', 'Recovery', 'Tolerance']],
+    ['social', 'Social', ['Intimidation', 'Persuasion', 'Composure']],
+    ['serendipity', 'Serendipity', ['Luck', 'Fortune', 'Opportunity']]
+  ];
+  const STAT_POINTS = 28, STAT_MAX = 10;
+  // Bonuses step up on odd numbers; 10 is the exception at +5.
+  const statBonus = (v) => (v >= 10 ? 5 : Math.max(0, Math.floor((v - 1) / 2)));
+  const fmtBonus = (b) => (b >= 0 ? '+' : '−') + Math.abs(b);
+  // [group, name, {stat: bonus}, features]
+  const BACKGROUNDS = [
+    ['Soldier', 'Infantry', { reflex: 1, endurance: 1 }, 'Rifle Training: proficiency with bolt-action rifles; ignore basic handling penalties. Machine Gun Training: operate machine guns without movement or stability penalties. Bayonet Training: a mounted bayonet works as a melee weapon using the rifle’s base damage.'],
+    ['Soldier', 'Combat Medic', { outlook: 1, wit: 1 }, 'Sidearm Training: proficiency with pistols and sidearms; drawing one doesn’t use an action. Field Treatment: when healing, roll twice and take the higher. Stabilization: attempt to stop injuries escalating during combat.'],
+    ['Soldier', 'Artillerist', { power: 1, outlook: 1 }, 'Artillery Operator: proficiency with artillery, cannons and mounted weapons. Targeting Discipline: advantage on Sense checks for range, positioning and targeting. Rifle Familiarity: proficiency with bolt-action rifles.'],
+    ['Industrial Worker', 'Factory Worker', { endurance: 1, reflex: 1 }, 'Quick Hands: reloading or readying equipment costs less when applicable. Enduring Hours: advantage resisting fatigue, strain and long physical stress. Work-Hardened: reduced penalties from fatigue, strain or long physical tasks.'],
+    ['Industrial Worker', 'Electrician', { wit: 1, outlook: 1 }, 'Technical Familiarity: advantage on Logic checks with electrical systems. Electrical Resistance: reduced damage from electrical sources. Reactive Grounding: as a reaction to an electrical attack, try to redirect or ground it.'],
+    ['Industrial Worker', 'Machine Operator', { wit: 2 }, 'Machine Savant: advantage on Logic checks with machinery. System Familiarity: an extra attempt when working mechanical devices. Mechanical Insight: spot weaknesses in machines or constructs.'],
+    ['Logistical Worker', 'Courier', { reflex: 1, outlook: 1 }, 'Expert Scout: choose Urban or Rural; advantage on Sense and Memory checks there. Careful Footwork: advantage on stealth movement and avoiding traps. Route Discipline: reduced penalties on difficult terrain.'],
+    ['Logistical Worker', 'Railway Operator', { power: 1, wit: 1 }, 'Operational Awareness: always aware of time, schedules and travel timing. Vehicle Combat Familiarity: advantage on checks while acting from moving vehicles. Mechanical Discipline: advantage on Logic checks with rail systems.'],
+    ['Logistical Worker', 'Prohibition Smuggler', { reflex: 1, social: 1 }, 'Get In, Get Out: once per combat, Disengage as a free action. Risk Conditioning: advantage on Composure checks under pressure, pursuit or tense negotiation. Substance Familiarity: reduced addiction or withdrawal penalties.'],
+    ['Performer', 'Wrestler', { power: 1, endurance: 1 }, 'Grapple Control: advantage on Force checks for grapples, holds and forced repositioning. Pinning Technique: a grappled target’s movement can drop to 0 until your next turn at no extra action. Ring Conditioning: advantage on Tolerance checks in long struggles or sustained melee.'],
+    ['Performer', 'Restaurant Server', { reflex: 1, social: 1 }, 'Crowd Weaving: advantage on Performance or Evasion checks moving through crowded interiors. Attentive Read: advantage on Insight checks about emotional cues. Steady Carry: reduced penalties balancing unstable objects or delicate tasks under stress.'],
+    ['Performer', 'Trapezist', { reflex: 1, serendipity: 1 }, 'Aerial Discipline: advantage on Performance checks for balance, climbing, swinging or heights. Mid-Air Recovery: once per encounter, reroll a failed Reflex movement or balance check and take the higher. Height Familiarity: reduced penalties from unstable footing, vertigo or height.'],
+    ['Investigative Worker', 'Private Detective', { outlook: 1, wit: 1 }, 'Shadowing: advantage on stealth when following someone in town. Close Observation: advantage on Insight during direct questioning. Revolver Familiarity: proficiency with revolvers.'],
+    ['Investigative Worker', 'Investigative Reporter', { wit: 1, social: 1 }, 'Press Authority: advantage on Persuasion when citing official documents. Deadline Drive: once per combat, reroll a failed Social check and take the higher. Quick Notes: advantage on Memory checks about things you witnessed.'],
+    ['Investigative Worker', 'Government Inspector', { wit: 1, social: 1 }, 'Procedural Command: advantage on Intimidation when asserting legal authority. Structural Awareness: advantage on Logic checks with institutional systems. Sidearm Familiarity: proficiency with pistols.'],
+    ['Occult & Religious Worker', 'Occult Researcher', { wit: 1, outlook: 1 }, 'Eldritch Lore: advantage on History checks about occult entities. Ritual Precision: in rituals, roll twice and take the higher. Mental Guard: advantage on Composure against supernatural fear.'],
+    ['Occult & Religious Worker', 'Clergy', { social: 1, outlook: 1 }, 'Rite of Resistance: advantage resisting possession or spiritual manipulation. Steady Voice: nearby allies get advantage on one Composure check per combat. Ceremonial Training: proficiency with blunt melee weapons.'],
+    ['Occult & Religious Worker', 'Gravekeeper', { outlook: 1, endurance: 1 }, 'Night Familiarity: reduced penalties from darkness. Corpse Handling: advantage on checks for cause of death. Unsettled Calm: advantage on Composure against fear.'],
+    ['Medical Worker', 'Street Doctor', { wit: 1, endurance: 1 }, 'Improvised Tools: no disadvantage healing without proper equipment. Rapid Patch: once per combat, stabilize an ally as a bonus action. Sedative Knowledge: advantage on checks with toxins or anesthetics.'],
+    ['Medical Worker', 'Asylum Orderly', { endurance: 1, wit: 1 }, 'Controlled Restraint: advantage on Force checks grappling unstable targets. Crisis Suppression: once per combat, as a reaction, remove fear from an ally. Sedation Handling: advantage resisting the sleep condition.'],
+    ['Medical Worker', 'Field Nurse', { outlook: 1, wit: 1 }, 'Combat Treatment: when healing in combat, roll twice and take the higher. Calm Under Fire: no penalties from nearby combat while treating an ally. Medical Kit Familiarity: proficiency with medical equipment.'],
+    ['Criminal Worker', 'Black Market Arms Dealer', { social: 1, reflex: 1 }, 'Weapon Familiarity: proficiency with one extra weapon category. Hidden Stock: from the first session, declare a common weapon or ammo type you have. Negotiation Edge: advantage on Persuasion in illicit deals.'],
+    ['Criminal Worker', 'Safecracker', { reflex: 1, wit: 1 }, 'Lock Discipline: advantage on Sleight of Hand with locks. Quiet Entry: failed lock attempts don’t automatically make noise. Mechanical Study: advantage on Logic checks with security mechanisms.'],
+    ['Criminal Worker', 'Saboteur', { reflex: 1, wit: 1 }, 'Structural Weakness: advantage on Logic checks finding machinery weaknesses. Timed Placement: thrown items don’t alert nearby enemies. Clean Escape: once per combat, Disengage free after damaging a structure.'],
+    ['Coastal Worker', 'Dockworker', { power: 1, endurance: 1 }, 'Heavy Lift: advantage on Force checks with cargo. Secure Rigging: your knots and restraints take extra effort to escape. Storm Conditioned: advantage resisting wind or water instability.'],
+    ['Coastal Worker', 'Ship Navigator', { outlook: 1, wit: 1 }, 'Dead Reckoning: advantage on Sense checks about direction. Sea Legs: reduced penalties fighting on unstable surfaces. Signal Familiarity: proficiency with fishing rods.'],
+    ['Coastal Worker', 'Radio Operator', { wit: 1, reflex: 1 }, 'Signal Clarity: advantage on Logic checks with radio equipment. Extended Relay: longer range for standard communication devices. Emergency Broadcast: once per combat, allies ignore illusion penalties for one round.']
+  ];
+  const sheetKey = () => 'campaign-map.sheet:' + SITE_KEY;
+  function loadSheet() {
+    const s = lsGet(sheetKey(), {}) || {};
+    const stats = {}, subs = {};
+    PROWESS.forEach(([k, , list]) => {
+      stats[k] = Math.min(STAT_MAX, Math.max(1, Math.round(num(s.stats && s.stats[k]) || 1)));
+      list.forEach((n) => { subs[n] = Math.max(-5, Math.min(10, Math.round(num(s.subs && s.subs[n]) || 0))); });
+    });
+    const t = (k) => str(s[k]);
+    return {
+      player: t('player'), name: t('name'), background: BACKGROUNDS.some((b) => b[1] === s.background) ? s.background : '',
+      affiliation: t('affiliation'), level: Math.max(1, Math.min(99, Math.round(num(s.level) || 1))), age: t('age'), height: t('height'), weight: t('weight'),
+      traits: t('traits'), stats, subs, stamina: t('stamina'), movement: t('movement'), meleeMod: t('meleeMod'),
+      primary: t('primary'), secondary: t('secondary'), armor: t('armor'), utility: t('utility'),
+      abilities: [0, 1, 2, 3].map((i) => str(arr(s.abilities)[i])),
+      conditions: t('conditions'), injuries: t('injuries'), reputation: t('reputation'), faction: t('faction'), goals: t('goals')
+    };
+  }
+  let sheetSaveTimer = null;
+  function saveSheet(s) { clearTimeout(sheetSaveTimer); sheetSaveTimer = setTimeout(() => lsSet(sheetKey(), s), 250); }
+  const bgOf = (s) => BACKGROUNDS.find((b) => b[1] === s.background);
+  const statTotal = (s, k) => { const bg = bgOf(s); return Math.min(STAT_MAX, s.stats[k] + ((bg && bg[2][k]) || 0)); };
+  const subValue = (s, k, n) => Math.max(1, statTotal(s, k) + (s.subs[n] || 0));
+  const pointsUsed = (s) => PROWESS.reduce((sum, [k]) => sum + (s.stats[k] - 1), 0);
+  // Roll d20 + bonus straight into the dice feed.
+  function rollCheck(label, bonus) {
+    if (isKicked()) { toast('You were removed from the session, so you can’t roll.', 'warn'); return; }
+    const r = rollDie(20);
+    const e = { id: uid(), byId: me.id, by: me.name || 'Someone', color: me.color, dm: editing, forName: '', forColor: '', sides: 20, count: 1, mod: bonus, results: [r], total: r + bonus, ts: Date.now(), revealed: false, label };
+    mergeRolls([e]);
+    publishRolls();
+    if (!lsGet(DICE_OPEN_KEY, false)) lsSet(DICE_OPEN_KEY, true);
+    renderDice(true);
+    toast(`${label}: rolled ${r} ${fmtBonus(bonus)} = ${r + bonus}${r === 20 ? ' (critical success)' : r === 1 ? ' (critical failure)' : ''}`, r === 20 ? 'ok' : r === 1 ? 'error' : 'info', 5000);
+  }
+  function renderCharacter(body) {
+    const s = loadSheet();
+    if (!s.player && me && me.name) s.player = me.name;
+    const rerender = () => { lsSet(sheetKey(), s); renderLog(); };
+    const text = (key, label, opts) => field(label, textInput(s[key], (v) => { s[key] = v; saveSheet(s); }, opts || {}));
+    const section = (title) => body.appendChild(el('div', 'cs-h', title));
+
+    body.appendChild(el('div', 'cs-title', '♚ Decline of the East ♚'));
+    const idg = el('div', 'cs-grid');
+    [['player', 'Player name'], ['name', 'Character name'], ['affiliation', 'Affiliation'], ['age', 'Age'], ['height', 'Height'], ['weight', 'Weight']].forEach(([k, l]) => idg.appendChild(text(k, l)));
+    const lvl = el('input');
+    lvl.type = 'number'; lvl.min = '1'; lvl.max = '99'; lvl.value = String(s.level);
+    lvl.onchange = () => { s.level = Math.max(1, Math.min(99, Math.round(+lvl.value || 1))); rerender(); };
+    idg.appendChild(field('Level', lvl));
+    body.appendChild(idg);
+    body.appendChild(text('traits', 'Notable traits / description', { multiline: true, rows: 3 }));
+
+    section('Background');
+    const bsel = el('select', 'cs-select');
+    bsel.add(new Option('Choose a background…', ''));
+    [...new Set(BACKGROUNDS.map((b) => b[0]))].forEach((g) => {
+      const og = document.createElement('optgroup');
+      og.label = g;
+      BACKGROUNDS.filter((b) => b[0] === g).forEach((b) => og.appendChild(new Option(b[1], b[1])));
+      bsel.appendChild(og);
+    });
+    bsel.value = s.background;
+    bsel.onchange = () => { s.background = bsel.value; rerender(); };
+    body.appendChild(bsel);
+    const bg = bgOf(s);
+    if (bg) {
+      const box = el('div', 'cs-bg');
+      box.appendChild(el('div', 'cs-bg-adj', 'Stat adjustment: ' + Object.entries(bg[2]).map(([k, v]) => `+${v} ${PROWESS.find((p) => p[0] === k)[1]}`).join(', ')));
+      bg[3].split(/(?<=\.)\s+(?=[A-Z][\w’' -]+:)/).forEach((f) => {
+        const m = /^([^:]+):\s*(.*)$/.exec(f);
+        const p = el('p');
+        if (m) { p.appendChild(el('b', null, m[1] + '. ')); p.appendChild(document.createTextNode(m[2])); } else p.textContent = f;
+        box.appendChild(p);
+      });
+      body.appendChild(box);
+    }
+
+    section('P.R.O.W.E.S.S');
+    const left = STAT_POINTS - pointsUsed(s);
+    body.appendChild(el('div', 'cs-points' + (left < 0 ? ' over' : left === 0 ? ' done' : ''), `${left} of ${STAT_POINTS} points left to spend · every stat starts at 1 · click a bonus to roll it`));
+    PROWESS.forEach(([k, label, list]) => {
+      const card = el('div', 'cs-stat');
+      const top = el('div', 'cs-stat-top');
+      top.appendChild(el('b', 'cs-stat-name', label));
+      const step = el('div', 'cs-step');
+      const minus = btn('−', 'small', () => { if (s.stats[k] > 1) { s.stats[k]--; rerender(); } });
+      const plus = btn('+', 'small', () => { if (s.stats[k] < STAT_MAX && pointsUsed(s) < STAT_POINTS) { s.stats[k]++; rerender(); } });
+      step.appendChild(minus);
+      step.appendChild(el('span', 'cs-base', String(s.stats[k])));
+      step.appendChild(plus);
+      top.appendChild(step);
+      const adj = (bg && bg[2][k]) || 0;
+      const total = statTotal(s, k);
+      top.appendChild(el('span', 'cs-adj', adj ? `+${adj} bg = ${total}` : `= ${total}`));
+      top.appendChild(btn(fmtBonus(statBonus(total)), 'small cs-roll', () => rollCheck(label + ' check', statBonus(total))));
+      card.appendChild(top);
+      list.forEach((n) => {
+        const row = el('div', 'cs-sub');
+        row.appendChild(el('span', 'cs-sub-name', n));
+        const st = el('div', 'cs-step');
+        st.appendChild(btn('−', 'small', () => { if ((s.subs[n] || 0) > -5) { s.subs[n] = (s.subs[n] || 0) - 1; rerender(); } }));
+        const extra = s.subs[n] || 0;
+        st.appendChild(el('span', 'cs-extra', extra ? (extra > 0 ? '+' : '') + extra : '·'));
+        st.appendChild(btn('+', 'small', () => { if ((s.subs[n] || 0) < 10) { s.subs[n] = (s.subs[n] || 0) + 1; rerender(); } }));
+        row.appendChild(st);
+        const v = subValue(s, k, n);
+        row.appendChild(el('span', 'cs-subval', String(v)));
+        row.appendChild(btn(fmtBonus(statBonus(v)), 'small cs-roll', () => rollCheck(n + ' check', statBonus(v))));
+        card.appendChild(row);
+      });
+      body.appendChild(card);
+    });
+    body.appendChild(el('p', 'cs-hint', 'Sub-stats start at their parent stat. Use their − and + for level-ups (each level adds 1 to one sub-stat), abilities or equipment.'));
+
+    section('Combat profile');
+    const vit = subValue(s, 'endurance', 'Vitality'), eva = subValue(s, 'outlook', 'Evasion'), spd = subValue(s, 'reflex', 'Speed');
+    const combat = el('div', 'cs-combat');
+    [['Max health', 10 + statBonus(vit) * s.level, `10 + Vitality bonus (${fmtBonus(statBonus(vit))}) × level ${s.level}`],
+      ['Armor class', Math.min(19, 10 + eva), `10 + Evasion (${eva}), max 19`],
+      ['Turn order (Speed)', spd, 'Higher Speed acts first']].forEach(([l, v, h]) => {
+      const c = el('div', 'cs-cbox');
+      c.appendChild(el('span', 'cs-clabel', l));
+      c.appendChild(el('b', 'cs-cval', String(v)));
+      c.appendChild(el('span', 'cs-chint', h));
+      combat.appendChild(c);
+    });
+    body.appendChild(combat);
+    const cg = el('div', 'cs-grid');
+    [['stamina', 'Stamina capacity'], ['movement', 'Movement speed'], ['meleeMod', 'Melee damage modifier']].forEach(([k, l]) => cg.appendChild(text(k, l)));
+    body.appendChild(cg);
+
+    section('Equipment');
+    const eg = el('div', 'cs-grid');
+    [['primary', 'Primary weapon'], ['secondary', 'Secondary weapon'], ['armor', 'Armor']].forEach(([k, l]) => eg.appendChild(text(k, l)));
+    body.appendChild(eg);
+    body.appendChild(text('utility', 'Utility items', { multiline: true, rows: 2 }));
+
+    section('Abilities / features');
+    s.abilities.forEach((a, i) => body.appendChild(field(`${i + 1}.`, textInput(a, (v) => { s.abilities[i] = v; saveSheet(s); }))));
+
+    section('Status & notes');
+    [['conditions', 'Active conditions'], ['injuries', 'Injuries'], ['reputation', 'Reputation'], ['faction', 'Faction standing']].forEach(([k, l]) => body.appendChild(text(k, l)));
+    body.appendChild(text('goals', 'Personal goals', { multiline: true, rows: 2 }));
+    body.appendChild(el('p', 'meta', 'Your character sheet is saved only in this browser on this device.'));
   }
 
   // ===== Editor =====

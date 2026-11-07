@@ -273,6 +273,44 @@ body.editing #dice { right: 374px; }
 .sound-new { grid-column: 1 / -1; margin: 0; color: var(--accent); }
 .ed-tabs { flex-wrap: wrap; }
 
+/* Character sheet (Logbook) */
+#logbook .tab-body label { display: block; margin: 0 0 10px; color: var(--muted); font: 600 12px var(--ui); }
+#logbook .tab-body input:not([type=checkbox]):not([type=range]), #logbook .tab-body textarea:not(.notes), #logbook .tab-body select {
+  display: block; width: 100%; margin-top: 5px; padding: 8px 9px; border: 1px solid #34343b; border-radius: 8px; background: #0d0d10; color: var(--text); font: 14px/1.4 var(--ui);
+}
+#logbook .tab-body textarea:not(.notes) { resize: vertical; }
+#logbook .tab-body input:focus, #logbook .tab-body textarea:focus, #logbook .tab-body select:focus { outline: none; border-color: var(--accent); }
+.tab-body.char-body { gap: 6px; }
+.cs-title { text-align: center; font: 700 17px 'Cinzel', Georgia, serif; letter-spacing: .06em; color: #e9dfc4; margin-bottom: 4px; }
+.cs-h { margin: 16px 0 6px; padding-bottom: 4px; border-bottom: 1px solid #3a3a41; color: #e9dfc4; font: 700 13px 'Cinzel', Georgia, serif; letter-spacing: .08em; text-transform: uppercase; }
+.cs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+.cs-bg { margin-top: 8px; padding: 10px 12px; border: 1px solid #34343b; border-radius: 8px; background: #16161a; font-size: 13px; line-height: 1.45; color: #cfc9bb; }
+.cs-bg p { margin: 6px 0 0; }
+.cs-bg b { color: var(--text); }
+.cs-bg-adj { color: var(--accent); font-weight: 700; }
+.cs-points { padding: 8px 10px; border-radius: 8px; background: #1d1d22; color: var(--muted); font-size: 12.5px; }
+.cs-points.done { color: #6fd6a0; }
+.cs-points.over { color: #ff8c8c; }
+.cs-stat { padding: 8px 10px; border: 1px solid #2f2f35; border-radius: 8px; background: #16161a; }
+.cs-stat-top { display: flex; align-items: center; gap: 8px; }
+.cs-stat-name { flex: 1; font: 700 15px 'Cinzel', Georgia, serif; color: #f1e8d0; }
+.cs-step { display: flex; align-items: center; gap: 3px; }
+.cs-step .btn { width: 24px; padding: 3px 0; }
+.cs-base, .cs-extra { min-width: 22px; text-align: center; font-weight: 700; }
+.cs-extra { color: var(--muted); font-weight: 600; font-size: 12px; }
+.cs-adj { min-width: 74px; color: var(--muted); font-size: 12px; text-align: right; }
+.cs-roll { min-width: 40px; border-color: var(--accent); color: var(--accent); }
+.cs-sub { display: flex; align-items: center; gap: 8px; margin-top: 5px; padding-left: 10px; font-size: 13px; }
+.cs-sub-name { flex: 1; color: #cfc9bb; }
+.cs-subval { min-width: 22px; text-align: right; font-weight: 700; }
+.cs-hint { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.cs-combat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px; }
+.cs-cbox { display: grid; gap: 2px; padding: 8px; border: 1px solid #2f2f35; border-radius: 8px; background: #16161a; text-align: center; }
+.cs-clabel { color: var(--muted); font-size: 11px; font-weight: 600; }
+.cs-cval { font-size: 22px; color: #fbf6ea; }
+.cs-chint { color: #7f7b72; font-size: 10.5px; line-height: 1.3; }
+.roll-label { color: var(--accent); }
+
 /* Fog brush cursor */
 #brush-cursor { position: absolute; z-index: 4; display: none; width: 90px; height: 90px; transform: translate(-50%, -50%); border: 2px solid rgba(232, 176, 74, .9); border-radius: 50%; background: rgba(232, 176, 74, .12); pointer-events: none; }
 #brush-cursor.erase { border-color: rgba(255, 255, 255, .9); border-style: dashed; background: rgba(255, 255, 255, .08); }
