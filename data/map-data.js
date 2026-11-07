@@ -2,10 +2,10 @@
 window.MAP_DATA = {
   "title": "Campaign Map",
   "showTitle": false,
-  "titleFont": "Cinzel",
+  "titleFont": "IM Fell English",
   "defaults": {
-    "titleFont": "Cinzel",
-    "bodyFont": "Spectral",
+    "titleFont": "IM Fell English",
+    "bodyFont": "IM Fell English",
     "textSize": "s",
     "color": "#e8b04a"
   },
@@ -6234,5 +6234,7 @@ window.MAP_DATA = {
         ]
       ]
     }
-  ]
+  ],
+  "stickers": [],
+  "monsters": []
 };
