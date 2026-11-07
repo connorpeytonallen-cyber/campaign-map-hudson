@@ -89,6 +89,8 @@
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const safeColor = (c, fallback = PIN_COLORS[0]) => (/^#[0-9a-f]{6}$/i.test(c || '') ? c.toLowerCase() : fallback);
   const fontInfo = (name) => FONTS.find((f) => f.name === name);
+  // Sound categories in the DM's sound board ('' = not sorted yet).
+  const SOUND_CATS = [['music', 'Background Music'], ['ambience', 'Ambience'], ['physical', 'Physical Effects'], ['monsters', 'Monsters'], ['interactive', 'Interactive'], ['', 'Unsorted']];
   // Fog styles. base/wisp: [noise frequency, layers of detail, ridged (streaky)].
   const FOG_LOOKS = {
     smoke: { name: 'Smoke', base: [4, 5, false], contrast: 1.0, wisp: [3, 5, false], wispLo: 0.5, wispHi: 0.85, wispAmt: 0.55 },
@@ -252,7 +254,7 @@
       const audio = safeAudioSrc(s.audio);
       if (!audio) continue;
       out.sounds.push({
-        id: str(s.id) || uid(), name: str(s.name) || 'Sound', audio, loop: !!s.loop,
+        id: str(s.id) || uid(), name: str(s.name) || 'Sound', audio, loop: !!s.loop, cat: SOUND_CATS.some(([k]) => k && k === s.cat) ? s.cat : '',
         volume: Math.min(1, Math.max(0.05, num(s.volume) == null ? 0.8 : num(s.volume)))
       });
     }
@@ -2182,6 +2184,8 @@
   function readFileAsDataURL(file) {
     return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => rej(fr.error); fr.readAsDataURL(file); });
   }
+  const SOUND_CAT_KEY = 'campaign-map.soundCat';
+  let soundCat = lsGet(SOUND_CAT_KEY, 'music') || 'music';
   function showSounds() {
     currentView = 'sounds'; selectedId = null; setTab('sounds'); updateStatus(); popup.remove();
     const b = body();
@@ -2199,7 +2203,7 @@
           let url = await readFileAsDataURL(f);
           if (/^data:(application\/octet-stream|);base64,/.test(url)) url = url.replace(/^data:[^;]*;/, 'data:audio/mpeg;');
           if (!safeAudioSrc(url)) { toast(`${f.name} isn’t an audio file this map can play.`, 'warn'); continue; }
-          data.sounds.push({ id: uid(), name: f.name.replace(/\.[^.]+$/, '').slice(0, 40), audio: url, loop: false, volume: 0.8 });
+          data.sounds.push({ id: uid(), name: f.name.replace(/\.[^.]+$/, '').slice(0, 40), audio: url, loop: soundCat === 'music' || soundCat === 'ambience', volume: 0.8, cat: soundCat === 'all' ? '' : soundCat });
         } catch (e) { toast(`Couldn’t read ${f.name}.`, 'error'); }
       }
       changed();
@@ -2210,9 +2214,21 @@
     top.appendChild(btn('Stop all', 'small', dmStopAll));
     b.appendChild(top);
     b.appendChild(el('p', 'tip', `Press Play during the session and it plays on every open map. Loops keep going (and start for anyone who joins) until you stop them. Publish after adding sounds so players get them. Up to ${MAX_AUDIO_MB} MB per file.`));
-    if (!data.sounds.length) { b.appendChild(el('p', 'muted', 'No sounds yet. Upload some MP3s to start.')); return; }
+    if (!data.sounds.length) { b.appendChild(el('p', 'muted', 'No sounds yet. Pick a category below, then upload MP3s into it.')); }
+    // Category chips: show one group at a time so there's less scrolling.
+    const cats = SOUND_CATS.filter(([k]) => k || data.sounds.some((s) => !s.cat));
+    if (soundCat !== 'all' && !cats.some(([k]) => k === soundCat)) soundCat = 'music';
+    const chips = el('div', 'sound-cats');
+    [['all', 'All']].concat(cats).forEach(([k, label]) => {
+      const inCat = k === 'all' ? data.sounds : data.sounds.filter((s) => s.cat === k);
+      const c = btn(label + ' ' + inCat.length, 'small sound-cat' + (soundCat === k ? ' on' : '') + (inCat.some((s) => s.loop && activeLoopIds.has(s.id)) ? ' live' : ''), () => { soundCat = k; lsSet(SOUND_CAT_KEY, k); showSounds(); });
+      chips.appendChild(c);
+    });
+    b.appendChild(chips);
+    const shown = soundCat === 'all' ? data.sounds : data.sounds.filter((s) => s.cat === soundCat);
+    if (data.sounds.length && !shown.length) b.appendChild(el('p', 'muted', 'Nothing in this category yet. Upload here, or move sounds in with their category menu.'));
     const list = el('div', 'sound-list');
-    data.sounds.forEach((s) => list.appendChild(soundRow(s)));
+    shown.forEach((s) => list.appendChild(soundRow(s)));
     b.appendChild(list);
     refreshSoundRows();
   }
@@ -2232,6 +2248,9 @@
     lc.onchange = () => { if (activeLoopIds.has(s.id)) dmStop(s); s.loop = lc.checked; changed(); refreshSoundRows(); };
     ll.appendChild(lc); ll.appendChild(document.createTextNode(' Loop'));
     opts.appendChild(ll);
+    const cs = selectInput(SOUND_CATS.map(([k, l]) => [k, l]), s.cat || '', (v) => { s.cat = v; changed(); showSounds(); });
+    cs.className = 'sound-catsel'; cs.title = 'Category';
+    opts.appendChild(cs);
     const v = el('input');
     v.type = 'range'; v.min = '0.05'; v.max = '1'; v.step = '0.05'; v.value = String(s.volume);
     v.title = 'Volume';

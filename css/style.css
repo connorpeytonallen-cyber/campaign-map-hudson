@@ -450,4 +450,10 @@ body.editing .qmarker { cursor: grab; }
     conic-gradient(hsl(0 85% 60%), hsl(60 85% 60%), hsl(120 85% 60%), hsl(180 85% 60%), hsl(240 85% 60%), hsl(300 85% 60%), hsl(360 85% 60%));
   box-shadow: 0 0 0 1px rgba(255, 255, 255, .12), 0 2px 10px rgba(0, 0, 0, .5); }
 .cwheel-knob { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .6), 0 1px 4px rgba(0, 0, 0, .6); pointer-events: none; }
-.cwheel-prev { width: 34px; height: 34px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .25); flex: none; }
+.cwheel-prev { width: 34px; height: 34px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .25); flex: none; }/* DM sound board categories */
+.sound-cats { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
+.sound-cat { border-radius: 999px; }
+.sound-cat.on { background: var(--accent, #e8b04a); color: #141414; border-color: transparent; }
+.sound-cat.live::after { content: ''; display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: #4ade80; vertical-align: middle; }
+.sound-opts { flex-wrap: wrap; }
+.ed-body select.sound-catsel { font-size: 12px; padding: 4px 6px; width: auto; flex: 1 1 120px; min-width: 110px; margin: 0; }
