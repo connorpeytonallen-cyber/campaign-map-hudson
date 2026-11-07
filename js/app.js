@@ -418,13 +418,11 @@
     const at = layers.findIndex((l) => l.id === 'roads-minor');
     layers.splice(at, 0, { id: 'regions-fill', type: 'fill', source: 'regions', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.16 } });
     layers.push(
-      // Everything outside the campaign area is covered in fog, so rotating the map never shows past its edge.
-      { id: 'outside', type: 'fill', source: 'outside', paint: { 'fill-pattern': 'fog-tex', 'fill-opacity': 1 } },
       { id: 'fog-haze', type: 'line', source: 'fog-soft', filter: ['==', ['get', 'active'], true], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#1e1e24', 'line-width': 90, 'line-blur': 80, 'line-opacity': 0.55 } },
       { id: 'fog-edge', type: 'line', source: 'fog-soft', filter: ['==', ['get', 'active'], true], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#1c1c21', 'line-width': 34, 'line-blur': 28, 'line-opacity': 0.9 } },
-      { id: 'fog-fill', type: 'fill', source: 'fog', filter: ['==', ['get', 'active'], true], paint: { 'fill-pattern': 'fog-tex', 'fill-opacity': 0.98 } },
-      { id: 'fog-wisp', type: 'fill', source: 'fog', filter: ['==', ['get', 'active'], true], paint: { 'fill-pattern': 'fog-wisp', 'fill-opacity': 1, 'fill-opacity-transition': { duration: 0, delay: 0 } } },
-      { id: 'fog-line', type: 'line', source: 'fog', layout: { visibility: 'none', 'line-join': 'round' }, paint: { 'line-color': '#c9c3b5', 'line-width': 1.5, 'line-dasharray': [2, 2], 'line-opacity': ['case', ['get', 'active'], 0.8, 0.4] } }
+      { id: 'fog-fill', type: 'fill', source: 'fog', filter: ['==', ['get', 'fill'], true], paint: { 'fill-pattern': 'fog-tex', 'fill-opacity': 0.98 } },
+      { id: 'fog-wisp', type: 'fill', source: 'fog', filter: ['==', ['get', 'fill'], true], paint: { 'fill-pattern': 'fog-wisp', 'fill-opacity': 1, 'fill-opacity-transition': { duration: 0, delay: 0 } } },
+      { id: 'fog-line', type: 'line', source: 'fog', filter: ['==', ['get', 'outline'], true], layout: { visibility: 'none', 'line-join': 'round' }, paint: { 'line-color': '#c9c3b5', 'line-width': 1.5, 'line-dasharray': [2, 2], 'line-opacity': ['case', ['get', 'active'], 0.8, 0.4] } }
     );
     layers.push(
       { id: 'regions-line', type: 'line', source: 'regions', paint: { 'line-color': ['get', 'color'], 'line-width': 1.8, 'line-opacity': 0.85, 'line-dasharray': [3, 2] } },
@@ -432,14 +430,21 @@
       { id: 'draft-line', type: 'line', source: 'draft', filter: ['==', ['geometry-type'], 'LineString'], paint: { 'line-color': '#e8b04a', 'line-width': 2 } },
       { id: 'draft-pts', type: 'circle', source: 'draft', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 5, 'circle-color': '#e8b04a', 'circle-stroke-color': '#000', 'circle-stroke-width': 1.5 } }
     );
+    // Start with only fog showing (see init): streets are switched on once the fog is in place.
+    BASE_IDS = layers.filter((l) => l.source === 'base').map((l) => l.id);
+    for (const l of layers) {
+      if (l.source === 'base') l.layout = Object.assign({}, l.layout, { visibility: 'none' });
+      if (l.id === 'land') l.paint = Object.assign({}, l.paint, { 'background-pattern': 'fog-tex' });
+    }
     // Region outlines go under the fog; the drawing preview stays on top of everything.
-    const rl = layers.findIndex((l) => l.id === 'regions-line'), fe = layers.findIndex((l) => l.id === 'outside');
+    const rl = layers.findIndex((l) => l.id === 'regions-line'), fe = layers.findIndex((l) => l.id === 'fog-haze');
     layers.splice(fe, 0, layers.splice(rl, 1)[0]);
-    return { version: 8, sources: { base: source, regions: { type: 'geojson', data: empty }, fog: { type: 'geojson', data: fogData.fog }, 'fog-soft': { type: 'geojson', data: fogData.soft, tolerance: 8, buffer: 256 }, outside: { type: 'geojson', data: outsideMask() }, draft: { type: 'geojson', data: empty } }, layers };
+    return { version: 8, sources: { base: source, regions: { type: 'geojson', data: empty }, fog: { type: 'geojson', data: fogData.fog }, 'fog-soft': { type: 'geojson', data: fogData.soft, tolerance: 8, buffer: 256 }, draft: { type: 'geojson', data: empty } }, layers };
   }
 
   // ===== App state =====
   let map, popup, published, data, panel = null, styleReady = false;
+  let BASE_IDS = [];
   let publishedStr = '', publishedRef = null; // remembered so each check for updates is cheap
   let editing = false, busy = false, mode = null; // mode: {type:'pin'} | {type:'quest', id} | {type:'region', points, editId}
   let popupKey = null, currentView = 'list', selectedId = null, saveTimer = null;
@@ -480,9 +485,20 @@
     popup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, maxWidth: 'none', className: 'loc-popup', focusAfterOpen: false });
     popup.on('close', () => { popupKey = null; highlight(null); });
     // Keep the map hidden until the fog is drawn, so a refresh never flashes the whole map.
-    map.getContainer().classList.add('loading');
-    const reveal = () => map.getContainer().classList.remove('loading');
-    map.on('load', () => { styleReady = true; fitSize(); renderFog(); renderRegions(); map.once('idle', reveal); setTimeout(reveal, 4000); });
+    // The map starts as solid fog; the streets appear under it once the fog shapes are in place,
+    // so a refresh never shows the hidden parts (and never a blank screen).
+    map.once('style.load', () => { buildFogLook(); pushFogImages(); });
+    let shown = false;
+    const showBase = () => {
+      if (shown) return;
+      shown = true;
+      try {
+        map.setPaintProperty('land', 'background-pattern', undefined);
+        for (const id of BASE_IDS) map.setLayoutProperty(id, 'visibility', 'visible');
+      } catch (e) { shown = false; setTimeout(showBase, 200); }
+    };
+    map.on('sourcedata', (e) => { if (e.sourceId === 'fog' && map.isSourceLoaded('fog')) requestAnimationFrame(showBase); });
+    map.on('load', () => { styleReady = true; fitSize(); renderFog(); renderRegions(); setTimeout(showBase, 3000); });
     map.on('styleimagemissing', (e) => { if ((e.id === 'fog-tex' || e.id === 'fog-wisp') && !map.hasImage(e.id)) { buildFogLook(); pushFogImages(); startFogAnim(); } });
     if (window.ResizeObserver) new ResizeObserver(() => fitSize()).observe(map.getContainer());
     lockZoom();
@@ -735,10 +751,23 @@
   function fogCollections() {
     const shaped = data.fog.filter((f) => f.shape), active = shaped.filter((f) => f.active);
     fogBoxes = active.map((f) => ringBox(f.shape.flatMap((p) => p[0])));
+    // One seamless cover: the fogged areas merged with everything outside the map, so it all looks the same.
+    const cover = { type: 'Feature', properties: { fill: true }, geometry: { type: 'MultiPolygon', coordinates: fogCover(active) } };
     return {
-      fog: { type: 'FeatureCollection', features: shaped.map((f) => ({ type: 'Feature', properties: { id: f.id, active: f.active }, geometry: { type: 'MultiPolygon', coordinates: f.shape } })) },
+      fog: { type: 'FeatureCollection', features: [cover].concat(shaped.map((f) => ({ type: 'Feature', properties: { id: f.id, active: f.active, outline: true }, geometry: { type: 'MultiPolygon', coordinates: f.shape } }))) },
       soft: { type: 'FeatureCollection', features: active.map((f) => ({ type: 'Feature', properties: { active: true }, geometry: { type: 'MultiLineString', coordinates: f.shape.flatMap((poly) => poly.map((ring) => smoothRing(ring, 2))) } })) }
     };
+  }
+  let coverCache = { shapes: null, geom: null };
+  function fogCover(active) {
+    const shapes = active.map((f) => f.shape);
+    if (coverCache.shapes && coverCache.shapes.length === shapes.length && coverCache.shapes.every((s, i) => s === shapes[i])) return coverCache.geom;
+    const mask = outsideMask().geometry.coordinates;
+    let geom = null;
+    try { if (window.polygonClipping) geom = window.polygonClipping.union(mask, ...shapes); } catch (e) { geom = null; }
+    if (!geom) geom = [mask].concat(...shapes); // fallback if the shape tool didn't load
+    coverCache = { shapes, geom };
+    return geom;
   }
   // The whole world with a hole cut out for the campaign area.
   function outsideMask() {
