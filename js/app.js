@@ -439,7 +439,8 @@
     // Region outlines go under the fog; the drawing preview stays on top of everything.
     const rl = layers.findIndex((l) => l.id === 'regions-line'), fe = layers.findIndex((l) => l.id === 'fog-haze');
     layers.splice(fe, 0, layers.splice(rl, 1)[0]);
-    return { version: 8, sources: { base: source, regions: { type: 'geojson', data: empty }, fog: { type: 'geojson', data: fogData.fog }, 'fog-soft': { type: 'geojson', data: fogData.soft, tolerance: 8, buffer: 256 }, draft: { type: 'geojson', data: empty } }, layers };
+    return { version: 8, sources: { base: source, regions: { type: 'geojson', data: empty }, /* Fog tiles are only cut up to a middling zoom and simply enlarged past it, so zooming in fast never
+    // waits on new fog tiles (which used to leave black squares for a moment). */ fog: { type: 'geojson', data: fogData.fog, maxzoom: 13 }, 'fog-soft': { type: 'geojson', data: fogData.soft, tolerance: 5, buffer: 256, maxzoom: 15 }, draft: { type: 'geojson', data: empty } }, layers };
   }
 
   // ===== App state =====
