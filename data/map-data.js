@@ -3012,7 +3012,48 @@ window.MAP_DATA = {
           "image": ""
         }
       ],
-      "npcs": []
+      "npcs": [
+        {
+          "id": "pmw60z2ctlbgk",
+          "name": "Nickel",
+          "role": "Leader",
+          "description": "\"Wiry, with a gray beard, in a patched army coat. Quiet and unhurried, he counts coins while you talk and never raises his voice, because he’s never needed to.\"",
+          "image": "",
+          "hidden": false
+        },
+        {
+          "id": "pmw6113nfp5fj",
+          "name": "Dot",
+          "role": "Shopskeeper",
+          "description": "\"Small and sharp-eyed, with a ledger on her knee. Friendly in the way a good trader is friendly with a warm smile, stands firm on price.\"",
+          "image": "",
+          "hidden": false
+        },
+        {
+          "id": "pmw6123troo7e",
+          "name": "Doc Whitlow",
+          "role": "Doctor",
+          "description": "\"Tall and stooped, with hands that shake until he picks up a scalpel. Tired, blunt and honest about how bad it is.\"",
+          "image": "",
+          "hidden": false
+        },
+        {
+          "id": "pmw612om9g30m",
+          "name": "Sully",
+          "role": "Salesman",
+          "description": "\"Round, red cheeked and already pouring. Talks fast, laughs loud and knows everybody’s business.\"",
+          "image": "",
+          "hidden": false
+        },
+        {
+          "id": "pmw613ektb82l",
+          "name": "Pruitt",
+          "role": "Scout",
+          "description": "\"Lean and hollow eyed, still in his raider’s coat, with wire marks on his wrists. Jumpy and grateful, he flinches at loud noises.\"",
+          "image": "",
+          "hidden": false
+        }
+      ]
     },
     {
       "id": "pmw600368d4ya",
