@@ -414,7 +414,7 @@
     });
     map.touchZoomRotate.disableRotation();
     if (map.keyboard && map.keyboard.disableRotation) map.keyboard.disableRotation();
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-left');
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
     popup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, maxWidth: 'none', className: 'loc-popup', focusAfterOpen: false });
     popup.on('close', () => { popupKey = null; highlight(null); });
@@ -1219,6 +1219,7 @@
   function startParty() {
     me = loadMe();
     renderParty();
+    renderDice(true);
     if (!me.name) openPartyEditor(me);
     const s = document.createElement('script');
     s.src = RELAY_LIB;
@@ -1239,7 +1240,7 @@
     } catch (e) { relayState = 'offline'; renderParty(); return; }
     relay.on('connect', () => {
       relayState = 'live';
-      relay.subscribe([`${ROOM}/p/+`, `${ROOM}/rename/${me.id}`]);
+      relay.subscribe([`${ROOM}/p/+`, `${ROOM}/rename/${me.id}`, `${ROOM}/dice/log`]);
       announce();
       renderParty();
     });
@@ -1255,6 +1256,7 @@
   }
   function onRelayMessage(topic, payload) {
     const txt = payload.toString();
+    if (topic === `${ROOM}/dice/log`) { if (txt) onDiceMessage(txt); return; }
     if (topic === `${ROOM}/rename/${me.id}`) {
       if (!txt) return;
       try {
@@ -1326,6 +1328,7 @@
     });
     if (relayState === 'offline') list.appendChild(el('div', 'party-note', 'Can’t reach the live service right now, so only you are shown. It keeps trying.'));
     box.appendChild(list);
+    fillDiceControls();
   }
   function openPartyEditor(p) {
     if (!p) return;
@@ -1376,6 +1379,226 @@
       renderParty();
     };
     return f;
+  }
+
+  // ===== Dice roller (bottom left): a shared, read-only feed of rolls =====
+  const DICE = [4, 6, 8, 10, 12, 20];
+  const DICE_LOG_MAX = 60, DICE_OPEN_KEY = 'campaign-map.diceOpen', HIDDEN_KEY = 'campaign-map.hiddenRolls:' + SITE_KEY;
+  let diceLog = [], diceSides = 20, diceCount = 1, diceMod = 0, diceFor = '', diceHidden = false, diceUnread = 0;
+  function rollDie(n) {
+    const a = new Uint32Array(1), lim = Math.floor(0x100000000 / n) * n;
+    let x;
+    do { crypto.getRandomValues(a); x = a[0]; } while (x >= lim);
+    return (x % n) + 1;
+  }
+  const diceLabel = (count, sides, mod) => `${count}d${sides}${mod ? (mod > 0 ? '+' : '') + mod : ''}`;
+  function cleanRoll(x) {
+    if (!x || typeof x.id !== 'string') return null;
+    const sides = DICE.includes(+x.sides) ? +x.sides : 0;
+    if (!sides) return null;
+    const results = arr(x.results).map(Number).filter((v) => Number.isInteger(v) && v >= 1 && v <= sides).slice(0, 20);
+    if (!results.length) return null;
+    const mod = Math.max(-99, Math.min(99, Math.round(num(x.mod) || 0)));
+    return {
+      id: x.id.slice(0, 40), byId: str(x.byId).slice(0, 40), by: cleanName(x.by) || 'Someone', color: safeColor(x.color, PIN_COLORS[0]),
+      dm: !!x.dm, forName: cleanName(x.forName), forColor: safeColor(x.forColor, ''), sides, count: results.length, mod, results,
+      total: results.reduce((s, v) => s + v, 0) + mod, ts: num(x.ts) || 0, revealed: !!x.revealed
+    };
+  }
+  function mergeRolls(list) {
+    const byKey = new Map(diceLog.map((x) => [x.id, x]));
+    let added = 0;
+    for (const raw of list) {
+      const x = cleanRoll(raw);
+      if (!x || byKey.has(x.id)) continue;
+      byKey.set(x.id, x);
+      added++;
+    }
+    diceLog = [...byKey.values()].sort((a, b) => a.ts - b.ts).slice(-DICE_LOG_MAX);
+    return added;
+  }
+  function publishRolls() {
+    if (relay && relay.connected) relay.publish(`${ROOM}/dice/log`, JSON.stringify(diceLog), { retain: true });
+  }
+  function onDiceMessage(txt) {
+    let list = [];
+    try { list = JSON.parse(txt); } catch (e) { return; }
+    if (!Array.isArray(list)) return;
+    const added = mergeRolls(list);
+    if (!added) return;
+    if (!lsGet(DICE_OPEN_KEY, false)) diceUnread += added;
+    renderDice(true);
+  }
+  function doRoll() {
+    const results = Array.from({ length: diceCount }, () => rollDie(diceSides));
+    const target = editing && diceFor ? party.get(diceFor) : null;
+    const e = {
+      id: uid(), byId: me.id, by: me.name || 'Someone', color: me.color, dm: editing,
+      forName: target ? target.name : '', forColor: target ? target.color : '', sides: diceSides, count: diceCount, mod: diceMod,
+      results, total: results.reduce((s, v) => s + v, 0) + diceMod, ts: Date.now(), revealed: false
+    };
+    if (editing && diceHidden) {
+      // Hidden rolls never leave your device until you reveal them.
+      const h = lsGet(HIDDEN_KEY, []);
+      h.push(e);
+      lsSet(HIDDEN_KEY, h.slice(-40));
+      renderDice(true);
+      return;
+    }
+    mergeRolls([e]);
+    publishRolls();
+    renderDice(true);
+  }
+  function revealRoll(id) {
+    const h = lsGet(HIDDEN_KEY, []);
+    const e = h.find((x) => x.id === id);
+    if (!e) return;
+    lsSet(HIDDEN_KEY, h.filter((x) => x.id !== id));
+    mergeRolls([Object.assign({}, e, { revealed: true, ts: Date.now() })]);
+    publishRolls();
+    renderDice(true);
+  }
+  function discardRoll(id) {
+    lsSet(HIDDEN_KEY, lsGet(HIDDEN_KEY, []).filter((x) => x.id !== id));
+    renderDice();
+  }
+  function rollLine(e, hidden) {
+    const row = el('div', 'roll' + (hidden ? ' hidden-roll' : ''));
+    row.appendChild(avatar({ name: e.forName || e.by, color: e.forName ? (e.forColor || e.color) : e.color }, 26));
+    const body = el('div', 'roll-body');
+    const who = el('div', 'roll-who');
+    if (e.forName) {
+      who.appendChild(el('b', null, e.by));
+      who.appendChild(document.createTextNode(' rolled for '));
+      who.appendChild(el('b', null, e.forName));
+    } else {
+      who.appendChild(el('b', null, e.by));
+      who.appendChild(document.createTextNode(' rolled'));
+    }
+    who.appendChild(document.createTextNode(' ' + diceLabel(e.count, e.sides, e.mod)));
+    if (e.revealed) who.appendChild(el('span', 'roll-tag', 'revealed'));
+    if (hidden) who.appendChild(el('span', 'roll-tag dm', 'hidden'));
+    body.appendChild(who);
+    const res = el('div', 'roll-res');
+    e.results.forEach((v) => {
+      const d = el('span', 'roll-die', String(v));
+      if (e.sides === 20 && v === 20) d.classList.add('crit');
+      if (e.sides === 20 && v === 1) d.classList.add('fumble');
+      res.appendChild(d);
+    });
+    if (e.mod) res.appendChild(el('span', 'roll-mod', (e.mod > 0 ? '+ ' : '− ') + Math.abs(e.mod)));
+    res.appendChild(el('span', 'roll-total', '= ' + e.total));
+    body.appendChild(res);
+    if (hidden) {
+      const acts = el('div', 'roll-acts');
+      acts.appendChild(btn('Reveal', 'small primary', () => revealRoll(e.id)));
+      acts.appendChild(btn('Discard', 'small ghost', () => discardRoll(e.id)));
+      body.appendChild(acts);
+    }
+    row.appendChild(body);
+    return row;
+  }
+  function renderDice(scroll) {
+    const box = $('#dice');
+    if (!box || !me) return;
+    const open = lsGet(DICE_OPEN_KEY, false);
+    box.classList.toggle('open', open);
+    if (!open) {
+      box.innerHTML = '';
+      box.appendChild(diceHead(false));
+      return;
+    }
+    if (!box.querySelector('.dice-log')) buildDiceShell(box);
+    const log = box.querySelector('.dice-log');
+    const atEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 30;
+    log.innerHTML = '';
+    if (!diceLog.length) log.appendChild(el('div', 'dice-empty', 'No rolls yet. Pick a die below and roll.'));
+    diceLog.forEach((e) => log.appendChild(rollLine(e, false)));
+    if (editing) {
+      const h = lsGet(HIDDEN_KEY, []);
+      if (h.length) {
+        log.appendChild(el('div', 'dice-sep', 'Your hidden rolls (only you can see these)'));
+        h.forEach((e) => log.appendChild(rollLine(e, true)));
+      }
+    }
+    if (scroll || atEnd) log.scrollTop = log.scrollHeight;
+    fillDiceControls();
+  }
+  // Same header as the Party panel: click it to open or close.
+  function diceHead(open) {
+    const head = el('button', 'party-head dice-head');
+    head.type = 'button';
+    head.setAttribute('aria-expanded', String(open));
+    head.appendChild(el('span', 'party-title', 'Dice rolls'));
+    if (!open && diceUnread) head.appendChild(el('span', 'dice-badge', String(diceUnread)));
+    head.appendChild(el('span', 'party-chev', open ? '▴' : '▾'));
+    head.onclick = () => { lsSet(DICE_OPEN_KEY, !open); if (!open) diceUnread = 0; renderDice(true); };
+    return head;
+  }
+  function buildDiceShell(box) {
+    box.innerHTML = '';
+    box.appendChild(diceHead(true));
+    box.appendChild(el('div', 'dice-log'));
+    const c = el('div', 'dice-controls');
+    const dice = el('div', 'dice-row dice-pick');
+    DICE.forEach((n) => {
+      const b = el('button', 'die', 'd' + n);
+      b.type = 'button';
+      b.dataset.sides = n;
+      b.onclick = () => { diceSides = n; fillDiceControls(); };
+      dice.appendChild(b);
+    });
+    c.appendChild(dice);
+    const row = el('div', 'dice-row');
+    const cnt = el('div', 'dice-count');
+    cnt.appendChild(btn('−', 'small', () => { diceCount = Math.max(1, diceCount - 1); fillDiceControls(); }));
+    cnt.appendChild(el('span', 'dice-n'));
+    cnt.appendChild(btn('+', 'small', () => { diceCount = Math.min(20, diceCount + 1); fillDiceControls(); }));
+    row.appendChild(cnt);
+    const modL = el('label', 'dice-mod', 'Mod');
+    const mod = el('input');
+    mod.type = 'number'; mod.min = '-99'; mod.max = '99'; mod.step = '1'; mod.value = String(diceMod);
+    mod.oninput = () => { diceMod = Math.max(-99, Math.min(99, Math.round(+mod.value || 0))); fillDiceControls(); };
+    modL.appendChild(mod);
+    row.appendChild(modL);
+    const roll = btn('Roll', 'primary dice-roll', () => doRoll());
+    row.appendChild(roll);
+    c.appendChild(row);
+    const dm = el('div', 'dice-row dice-dm');
+    const forL = el('label', 'dice-for', 'Roll for');
+    const sel = el('select');
+    sel.onchange = () => { diceFor = sel.value; };
+    forL.appendChild(sel);
+    dm.appendChild(forL);
+    const hl = el('label', 'dice-hide');
+    const hc = el('input');
+    hc.type = 'checkbox';
+    hc.onchange = () => { diceHidden = hc.checked; fillDiceControls(); };
+    hl.appendChild(hc);
+    hl.appendChild(document.createTextNode(' Hidden'));
+    dm.appendChild(hl);
+    c.appendChild(dm);
+    box.appendChild(c);
+  }
+  function fillDiceControls() {
+    const box = $('#dice');
+    if (!box || !box.querySelector('.dice-controls')) return;
+    box.querySelectorAll('.die').forEach((b) => b.classList.toggle('on', +b.dataset.sides === diceSides));
+    box.querySelector('.dice-n').textContent = String(diceCount);
+    box.querySelector('.dice-roll').textContent = (editing && diceHidden ? 'Roll hidden ' : 'Roll ') + diceLabel(diceCount, diceSides, diceMod);
+    const dm = box.querySelector('.dice-dm');
+    dm.hidden = !editing;
+    if (editing) {
+      const sel = dm.querySelector('select');
+      const now = Date.now();
+      const players = [...party.values()].filter((p) => now - p.ts < ONLINE_MS && p.name);
+      sel.innerHTML = '';
+      sel.add(new Option('Myself', ''));
+      players.forEach((p) => sel.add(new Option(p.name, p.id)));
+      if (!players.some((p) => p.id === diceFor)) diceFor = '';
+      sel.value = diceFor;
+      dm.querySelector('input[type=checkbox]').checked = diceHidden;
+    }
   }
 
   // ===== Editor =====
@@ -1455,7 +1678,7 @@
     popup.remove();
     renderAll();
     showList();
-    announce(); renderParty();
+    announce(); renderParty(); renderDice();
   }
 
   function exitEdit() {
@@ -1469,7 +1692,7 @@
     popup.remove();
     renderAll();
     map.resize();
-    announce(); renderParty();
+    announce(); renderParty(); renderDice();
     if (hadChanges) toast('Your unpublished changes are saved on this device. Open #edit again to finish and publish.', 'info', 7000);
   }
 
