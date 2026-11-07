@@ -1287,7 +1287,8 @@
     } catch (e) { relayState = 'offline'; renderParty(); return; }
     relay.on('connect', () => {
       relayState = 'live';
-      relay.subscribe([`${ROOM}/p/+`, `${ROOM}/rename/${me.id}`, `${ROOM}/dice/log`, `${ROOM}/kick/+`, `${ROOM}/sound`, `${ROOM}/sound/state`]);
+      relay.subscribe([`${ROOM}/p/+`, `${ROOM}/rename/${me.id}`, `${ROOM}/dice/log`, `${ROOM}/kick/+`, `${ROOM}/sound`, `${ROOM}/sound/state`, `${ROOM}/abilities/${me.id}`]);
+      if (editing) relay.subscribe(`${ROOM}/abilities/+`);
       announce();
       renderParty();
     });
@@ -1306,6 +1307,7 @@
     if (topic === `${ROOM}/dice/log`) { if (!isKicked() && txt) onDiceMessage(txt); return; }
     if (topic.startsWith(`${ROOM}/kick/`)) { onKickMessage(topic.split('/').pop(), txt); return; }
     if (topic === `${ROOM}/sound` || topic === `${ROOM}/sound/state`) { onSoundMessage(topic, txt); return; }
+    if (topic.startsWith(`${ROOM}/abilities/`)) { onAbilityMessage(topic.split('/').pop(), txt); return; }
     if (topic === `${ROOM}/rename/${me.id}`) {
       if (!txt) return;
       try {
@@ -1328,6 +1330,7 @@
       const p = JSON.parse(txt);
       if (!p || p.id !== id) return;
       party.set(id, { id, name: cleanName(p.name), color: safeColor(p.color, PIN_COLORS[0]), dm: !!p.dm, ts: num(p.ts) || 0 });
+      if (!p.dm) rememberPlayer({ id, name: cleanName(p.name) });
       renderParty();
     } catch (e) { /* bad message */ }
   }
@@ -1470,6 +1473,8 @@
     f.appendChild(sw);
     const row = el('div', 'party-edit-btns');
     if (!isMe && editing) {
+      const ab = btn('Abilities', 'small', () => { partyEdit = null; renderParty(); showAbilityEditor(p.id); });
+      f.insertBefore(ab, row.parentNode === f ? row : null);
       const k = btn('Kick', 'small danger', async () => {
         if (!(await ask(`Remove ${p.name || 'this player'} from the session? They won’t appear in the party or be able to roll dice until you let them back in.`, 'Kick', 'Cancel'))) return;
         kickPlayer(p);
@@ -1504,7 +1509,7 @@
   // ===== Dice roller (bottom left): a shared, read-only feed of rolls =====
   const DICE = [4, 6, 8, 10, 12, 20];
   const DICE_LOG_MAX = 60, DICE_OPEN_KEY = 'campaign-map.diceOpen', HIDDEN_KEY = 'campaign-map.hiddenRolls:' + SITE_KEY;
-  let diceLog = [], diceSides = 20, diceCount = 1, diceMod = 0, diceFor = '', diceHidden = false, diceUnread = 0, diceClearedAt = 0;
+  let diceLog = [], diceSides = 20, diceCount = 1, diceMod = 0, diceFor = '', diceHidden = false, diceUnread = 0, diceClearedAt = 0, diceNextLabel = '';
   function rollDie(n) {
     const a = new Uint32Array(1), lim = Math.floor(0x100000000 / n) * n;
     let x;
@@ -1567,7 +1572,7 @@
     const e = {
       id: uid(), byId: me.id, by: me.name || 'Someone', color: me.color, dm: editing,
       forName: target ? target.name : '', forColor: target ? target.color : '', sides: diceSides, count: diceCount, mod: diceMod,
-      results, total: results.reduce((s, v) => s + v, 0) + diceMod, ts: Date.now(), revealed: false
+      results, total: results.reduce((s, v) => s + v, 0) + diceMod, ts: Date.now(), revealed: false, label: diceNextLabel
     };
     if (editing && diceHidden) {
       // Hidden rolls never leave your device until you reveal them.
@@ -1679,20 +1684,20 @@
       const b = el('button', 'die', 'd' + n);
       b.type = 'button';
       b.dataset.sides = n;
-      b.onclick = () => { diceSides = n; fillDiceControls(); };
+      b.onclick = () => { diceSides = n; diceNextLabel = ''; fillDiceControls(); };
       dice.appendChild(b);
     });
     c.appendChild(dice);
     const row = el('div', 'dice-row');
     const cnt = el('div', 'dice-count');
-    cnt.appendChild(btn('−', 'small', () => { diceCount = Math.max(1, diceCount - 1); fillDiceControls(); }));
+    cnt.appendChild(btn('−', 'small', () => { diceCount = Math.max(1, diceCount - 1); diceNextLabel = ''; fillDiceControls(); }));
     cnt.appendChild(el('span', 'dice-n'));
-    cnt.appendChild(btn('+', 'small', () => { diceCount = Math.min(20, diceCount + 1); fillDiceControls(); }));
+    cnt.appendChild(btn('+', 'small', () => { diceCount = Math.min(20, diceCount + 1); diceNextLabel = ''; fillDiceControls(); }));
     row.appendChild(cnt);
     const modL = el('label', 'dice-mod', 'Mod');
     const mod = el('input');
     mod.type = 'number'; mod.min = '-99'; mod.max = '99'; mod.step = '1'; mod.value = String(diceMod);
-    mod.oninput = () => { diceMod = Math.max(-99, Math.min(99, Math.round(+mod.value || 0))); fillDiceControls(); };
+    mod.oninput = () => { diceMod = Math.max(-99, Math.min(99, Math.round(+mod.value || 0))); diceNextLabel = ''; fillDiceControls(); };
     modL.appendChild(mod);
     row.appendChild(modL);
     const roll = btn('Roll', 'primary dice-roll', () => doRoll());
@@ -1729,7 +1734,9 @@
     if (!box || !box.querySelector('.dice-controls')) return;
     box.querySelectorAll('.die').forEach((b) => b.classList.toggle('on', +b.dataset.sides === diceSides));
     box.querySelector('.dice-n').textContent = String(diceCount);
-    box.querySelector('.dice-roll').textContent = (editing && diceHidden ? 'Roll hidden ' : 'Roll ') + diceLabel(diceCount, diceSides, diceMod);
+    box.querySelector('.dice-roll').textContent = (editing && diceHidden ? 'Roll hidden ' : 'Roll ') + diceLabel(diceCount, diceSides, diceMod) + (diceNextLabel ? ' · ' + diceNextLabel : '');
+    const modIn = box.querySelector('.dice-mod input');
+    if (modIn && document.activeElement !== modIn) modIn.value = String(diceMod);
     box.querySelectorAll('.dice-dm').forEach((row) => { row.hidden = !editing; });
     const dm = box.querySelector('.dice-dm');
     if (editing) {
@@ -1969,16 +1976,60 @@
       player: t('player'), name: t('name'), background: BACKGROUNDS.some((b) => b[1] === s.background) ? s.background : '',
       affiliation: t('affiliation'), level: Math.max(1, Math.min(99, Math.round(num(s.level) || 1))), age: t('age'), height: t('height'), weight: t('weight'),
       traits: t('traits'), stats, subs, stamina: t('stamina'), movement: t('movement'), meleeMod: t('meleeMod'),
-      primary: t('primary'), secondary: t('secondary'), armor: t('armor'), utility: t('utility'),
-      abilities: [0, 1, 2, 3].map((i) => str(arr(s.abilities)[i])),
-      conditions: t('conditions'), injuries: t('injuries'), reputation: t('reputation'), faction: t('faction'), goals: t('goals')
+      inventory: arr(s.inventory).filter(Boolean).map((i) => ({ id: str(i.id) || uid(), name: str(i.name), qty: str(i.qty), notes: str(i.notes) }))
     };
+  }
+  // Abilities are given by the DM. Players get them over the relay and keep a copy on their device.
+  const ABIL_KEY = () => 'campaign-map.abilities:' + SITE_KEY, DM_ABIL_KEY = () => 'campaign-map.dmAbilities:' + SITE_KEY;
+  const KNOWN_KEY = () => 'campaign-map.knownPlayers:' + SITE_KEY;
+  function cleanAbilities(a) {
+    a = a && typeof a === 'object' ? a : {};
+    return {
+      passives: arr(a.passives).filter(Boolean).slice(0, 40).map((p) => ({ id: str(p.id) || uid(), name: str(p.name).slice(0, 60), desc: str(p.desc).slice(0, 1000) })),
+      actives: arr(a.actives).filter(Boolean).slice(0, 40).map((p) => ({
+        id: str(p.id) || uid(), name: str(p.name).slice(0, 60), desc: str(p.desc).slice(0, 1000),
+        sides: DICE.includes(+p.sides) ? +p.sides : 0, count: Math.max(1, Math.min(20, Math.round(num(p.count) || 1))),
+        mod: Math.max(-99, Math.min(99, Math.round(num(p.mod) || 0)))
+      })),
+      ts: num(a.ts) || 0
+    };
+  }
+  const myAbilities = () => cleanAbilities(lsGet(ABIL_KEY(), {}));
+  function onAbilityMessage(id, txt) {
+    if (!txt) return;
+    let a;
+    try { a = cleanAbilities(JSON.parse(txt)); } catch (e) { return; }
+    if (id === me.id) {
+      if (a.ts < myAbilities().ts) return;
+      lsSet(ABIL_KEY(), a);
+      if (!$('#logbook').hidden && logTab === 'character') renderLog();
+    }
+    if (editing) {
+      const all = lsGet(DM_ABIL_KEY(), {}) || {};
+      if (!all[id] || (num(all[id].ts) || 0) <= a.ts) { all[id] = a; lsSet(DM_ABIL_KEY(), all); }
+    }
+  }
+  function sendAbilities(playerId, a) {
+    a.ts = Date.now();
+    const all = lsGet(DM_ABIL_KEY(), {}) || {};
+    all[playerId] = a;
+    lsSet(DM_ABIL_KEY(), all);
+    if (relay && relay.connected) relay.publish(`${ROOM}/abilities/${playerId}`, JSON.stringify(a), { retain: true });
+    else toast('Can’t reach the live service, so this player gets the change once it reconnects and you save again.', 'warn', 7000);
+  }
+  function rememberPlayer(p) {
+    if (!p || !p.id || p.id === (me && me.id)) return;
+    const k = lsGet(KNOWN_KEY(), {}) || {};
+    if (k[p.id] && k[p.id] === p.name) return;
+    k[p.id] = p.name || 'Unnamed';
+    lsSet(KNOWN_KEY(), k);
   }
   let sheetSaveTimer = null;
   function saveSheet(s) { clearTimeout(sheetSaveTimer); sheetSaveTimer = setTimeout(() => lsSet(sheetKey(), s), 250); }
   const bgOf = (s) => BACKGROUNDS.find((b) => b[1] === s.background);
   const statTotal = (s, k) => { const bg = bgOf(s); return Math.min(STAT_MAX, s.stats[k] + ((bg && bg[2][k]) || 0)); };
-  const subValue = (s, k, n) => Math.max(1, statTotal(s, k) + (s.subs[n] || 0));
+  const SUB_MAX = 10;
+  const subValue = (s, k, n) => Math.min(SUB_MAX, Math.max(1, statTotal(s, k) + (s.subs[n] || 0)));
   const pointsUsed = (s) => PROWESS.reduce((sum, [k]) => sum + (s.stats[k] - 1), 0);
   // Roll d20 + bonus straight into the dice feed.
   function rollCheck(label, bonus) {
@@ -1998,7 +2049,7 @@
     const text = (key, label, opts) => field(label, textInput(s[key], (v) => { s[key] = v; saveSheet(s); }, opts || {}));
     const section = (title) => body.appendChild(el('div', 'cs-h', title));
 
-    body.appendChild(el('div', 'cs-title', '♚ Decline of the East ♚'));
+    body.appendChild(el('div', 'cs-title', 'Decline of the East'));
     const idg = el('div', 'cs-grid');
     [['player', 'Player name'], ['name', 'Character name'], ['affiliation', 'Affiliation'], ['age', 'Age'], ['height', 'Height'], ['weight', 'Weight']].forEach(([k, l]) => idg.appendChild(text(k, l)));
     const lvl = el('input');
@@ -2006,7 +2057,7 @@
     lvl.onchange = () => { s.level = Math.max(1, Math.min(99, Math.round(+lvl.value || 1))); rerender(); };
     idg.appendChild(field('Level', lvl));
     body.appendChild(idg);
-    body.appendChild(text('traits', 'Notable traits / description', { multiline: true, rows: 3 }));
+    body.appendChild(text('traits', 'Description', { multiline: true, rows: 3 }));
 
     section('Background');
     const bsel = el('select', 'cs-select');
@@ -2059,7 +2110,7 @@
         st.appendChild(btn('−', 'small', () => { if ((s.subs[n] || 0) > -5) { s.subs[n] = (s.subs[n] || 0) - 1; rerender(); } }));
         const extra = s.subs[n] || 0;
         st.appendChild(el('span', 'cs-extra', extra ? (extra > 0 ? '+' : '') + extra : '·'));
-        st.appendChild(btn('+', 'small', () => { if ((s.subs[n] || 0) < 10) { s.subs[n] = (s.subs[n] || 0) + 1; rerender(); } }));
+        st.appendChild(btn('+', 'small', () => { if (subValue(s, k, n) < SUB_MAX) { s.subs[n] = (s.subs[n] || 0) + 1; rerender(); } }));
         row.appendChild(st);
         const v = subValue(s, k, n);
         row.appendChild(el('span', 'cs-subval', String(v)));
@@ -2068,7 +2119,7 @@
       });
       body.appendChild(card);
     });
-    body.appendChild(el('p', 'cs-hint', 'Sub-stats start at their parent stat. Use their − and + for level-ups (each level adds 1 to one sub-stat), abilities or equipment.'));
+    body.appendChild(el('p', 'cs-hint', `Sub-stats start at their parent stat and go up to ${SUB_MAX}. Use their − and + for level-ups (each level adds 1 to one sub-stat), abilities or equipment.`));
 
     section('Combat profile');
     const vit = subValue(s, 'endurance', 'Vitality'), eva = subValue(s, 'outlook', 'Evasion'), spd = subValue(s, 'reflex', 'Speed');
@@ -2087,19 +2138,55 @@
     [['stamina', 'Stamina capacity'], ['movement', 'Movement speed'], ['meleeMod', 'Melee damage modifier']].forEach(([k, l]) => cg.appendChild(text(k, l)));
     body.appendChild(cg);
 
-    section('Equipment');
-    const eg = el('div', 'cs-grid');
-    [['primary', 'Primary weapon'], ['secondary', 'Secondary weapon'], ['armor', 'Armor']].forEach(([k, l]) => eg.appendChild(text(k, l)));
-    body.appendChild(eg);
-    body.appendChild(text('utility', 'Utility items', { multiline: true, rows: 2 }));
+    section('Inventory');
+    if (!s.inventory.length) body.appendChild(el('p', 'cs-hint', 'Nothing yet. Add weapons, armor, tools, ammo, keepsakes…'));
+    s.inventory.forEach((it, idx) => {
+      const row = el('div', 'cs-inv');
+      const nm = textInput(it.name, (v) => { it.name = v; saveSheet(s); }, { placeholder: 'Item' });
+      const qty = textInput(it.qty, (v) => { it.qty = v; saveSheet(s); }, { placeholder: 'Qty' });
+      qty.className = 'cs-qty';
+      const nt = textInput(it.notes, (v) => { it.notes = v; saveSheet(s); }, { placeholder: 'Notes (damage, condition…)' });
+      nt.className = 'cs-inv-notes';
+      row.appendChild(nm); row.appendChild(qty);
+      row.appendChild(btn('×', 'small ghost cs-del', () => { s.inventory.splice(idx, 1); rerender(); }));
+      row.appendChild(nt);
+      body.appendChild(row);
+    });
+    body.appendChild(btn('+ Add item', 'small', () => { s.inventory.push({ id: uid(), name: '', qty: '1', notes: '' }); rerender(); }));
 
-    section('Abilities / features');
-    s.abilities.forEach((a, i) => body.appendChild(field(`${i + 1}.`, textInput(a, (v) => { s.abilities[i] = v; saveSheet(s); }))));
-
-    section('Status & notes');
-    [['conditions', 'Active conditions'], ['injuries', 'Injuries'], ['reputation', 'Reputation'], ['faction', 'Faction standing']].forEach(([k, l]) => body.appendChild(text(k, l)));
-    body.appendChild(text('goals', 'Personal goals', { multiline: true, rows: 2 }));
+    const ab = myAbilities();
+    section('Passives');
+    if (!ab.passives.length) body.appendChild(el('p', 'cs-hint', 'None yet. Your DM adds these.'));
+    ab.passives.forEach((p) => {
+      const c = el('div', 'cs-ability');
+      c.appendChild(el('b', null, p.name || 'Unnamed passive'));
+      if (p.desc.trim()) { const d = el('div', 'cs-adesc'); d.innerHTML = richText(p.desc); c.appendChild(d); }
+      body.appendChild(c);
+    });
+    section('Actives');
+    if (!ab.actives.length) body.appendChild(el('p', 'cs-hint', 'None yet. Your DM adds these.'));
+    ab.actives.forEach((p) => {
+      const c = el('div', 'cs-ability');
+      const top = el('div', 'cs-atop');
+      top.appendChild(el('b', null, p.name || 'Unnamed active'));
+      if (p.sides) {
+        top.appendChild(el('span', 'cs-adice', diceLabel(p.count, p.sides, p.mod)));
+        top.appendChild(btn('Load into dice', 'small cs-roll', () => loadIntoDice(p)));
+      }
+      c.appendChild(top);
+      if (p.desc.trim()) { const d = el('div', 'cs-adesc'); d.innerHTML = richText(p.desc); c.appendChild(d); }
+      body.appendChild(c);
+    });
     body.appendChild(el('p', 'meta', 'Your character sheet is saved only in this browser on this device.'));
+  }
+  // Set the dice tray up for an active ability's attack; the player presses Roll.
+  function loadIntoDice(p) {
+    diceSides = p.sides; diceCount = p.count; diceMod = p.mod; diceNextLabel = p.name;
+    lsSet(DICE_OPEN_KEY, true);
+    renderDice(true);
+    const m = $('#dice .dice-mod input');
+    if (m) m.value = String(diceMod);
+    toast(`${p.name} is loaded into the dice tray. Press Roll when ready.`, 'info', 4000);
   }
 
   // ===== Editor =====
@@ -2180,6 +2267,7 @@
     renderAll();
     showList();
     announce(); renderParty(); renderDice(); renderSoundCtl();
+    if (relay && relay.connected) relay.subscribe(`${ROOM}/abilities/+`);
   }
 
   function exitEdit() {
@@ -2928,6 +3016,56 @@
     }));
     foot.appendChild(btn('Done', 'primary', showStickers));
     b.appendChild(foot);
+  }
+
+  // --- Player abilities (DM gives each player passives and actives) ---
+  let abilSendTimer = null;
+  function showAbilityEditor(playerId) {
+    if (!editing) return;
+    currentView = 'abilities'; selectedId = playerId; setTab(null); updateStatus(); popup.remove();
+    const known = Object.assign({}, lsGet(KNOWN_KEY(), {}) || {});
+    for (const p of party.values()) if (!p.dm) known[p.id] = p.name || known[p.id] || 'Unnamed';
+    const b = body();
+    b.appendChild(el('div', 'form-head')).appendChild(btn('← Back', 'ghost small', showList));
+    const ids = Object.keys(known);
+    if (!ids.length) { b.appendChild(el('p', 'muted', 'No players have joined yet. Once someone opens the map, you can give them abilities here.')); return; }
+    if (!playerId || !known[playerId]) playerId = ids[0];
+    const sel = selectInput(ids.map((id) => [id, known[id] + (party.has(id) ? ' (online)' : '')]), playerId, (v) => showAbilityEditor(v));
+    b.appendChild(field('Player', sel));
+    const all = lsGet(DM_ABIL_KEY(), {}) || {};
+    const a = cleanAbilities(all[playerId]);
+    const status = el('p', 'tip', 'Changes are sent to this player’s character sheet automatically.');
+    const send = () => { clearTimeout(abilSendTimer); status.textContent = 'Sending…'; abilSendTimer = setTimeout(() => { sendAbilities(playerId, a); status.textContent = 'Sent to ' + known[playerId] + '.'; }, 600); };
+    b.appendChild(status);
+    const list = (title, arrKey, isActive) => {
+      b.appendChild(el('div', 'sub-h', title));
+      a[arrKey].forEach((item, idx) => {
+        const card = el('div', 'card-edit');
+        card.style.paddingTop = '10px';
+        card.appendChild(field('Name', textInput(item.name, (v) => { item.name = v; send(); })));
+        card.appendChild(field('Description', textInput(item.desc, (v) => { item.desc = v; send(); }, { multiline: true, rows: 3 })));
+        if (isActive) {
+          const r = el('div', 'row3');
+          const cnt = el('input'); cnt.type = 'number'; cnt.min = '1'; cnt.max = '20'; cnt.value = String(item.count);
+          cnt.oninput = () => { item.count = Math.max(1, Math.min(20, Math.round(+cnt.value || 1))); send(); };
+          r.appendChild(field('Dice', cnt));
+          r.appendChild(field('Die', selectInput([['0', 'No roll'], ...DICE.map((n) => [String(n), 'd' + n])], String(item.sides), (v) => { item.sides = +v; send(); })));
+          const md = el('input'); md.type = 'number'; md.min = '-99'; md.max = '99'; md.value = String(item.mod);
+          md.oninput = () => { item.mod = Math.max(-99, Math.min(99, Math.round(+md.value || 0))); send(); };
+          r.appendChild(field('Modifier', md));
+          card.appendChild(r);
+        }
+        card.appendChild(btn('Remove', 'small danger', () => { a[arrKey].splice(idx, 1); sendAbilities(playerId, a); showAbilityEditor(playerId); }));
+        b.appendChild(card);
+      });
+      b.appendChild(btn(isActive ? '+ Add active' : '+ Add passive', 'small', () => {
+        a[arrKey].push(isActive ? { id: uid(), name: '', desc: '', sides: 0, count: 1, mod: 0 } : { id: uid(), name: '', desc: '' });
+        sendAbilities(playerId, a);
+        showAbilityEditor(playerId);
+      }));
+    };
+    list('Passives', 'passives', false);
+    list('Actives (attacks can carry dice the player loads into the roller)', 'actives', true);
   }
 
   // --- Monster Logbook: stat blocks ---

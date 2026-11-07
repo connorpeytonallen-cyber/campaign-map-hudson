@@ -310,6 +310,17 @@ body.editing #dice { right: 374px; }
 .cs-cval { font-size: 22px; color: #fbf6ea; }
 .cs-chint { color: #7f7b72; font-size: 10.5px; line-height: 1.3; }
 .roll-label { color: var(--accent); }
+.cs-inv { display: grid; grid-template-columns: 1fr 56px 30px; gap: 4px 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid #26262b; }
+#logbook .tab-body .cs-inv input { margin-top: 0; }
+#logbook .tab-body .cs-inv .cs-inv-notes { grid-column: 1 / -1; font-size: 13px; padding: 6px 8px; }
+.cs-del { padding: 4px 0; }
+.cs-ability { padding: 8px 10px; border: 1px solid #2f2f35; border-radius: 8px; background: #16161a; display: grid; gap: 4px; }
+.cs-ability b { color: #f1e8d0; font-family: 'Cinzel', Georgia, serif; }
+.cs-atop { display: flex; align-items: center; gap: 8px; }
+.cs-atop b { flex: 1; }
+.cs-adice { color: var(--muted); font-weight: 700; font-size: 13px; }
+.cs-adesc { color: #cfc9bb; font-size: 13px; line-height: 1.45; }
+.party-edit > .btn { justify-self: start; }
 
 /* Fog brush cursor */
 #brush-cursor { position: absolute; z-index: 4; display: none; width: 90px; height: 90px; transform: translate(-50%, -50%); border: 2px solid rgba(232, 176, 74, .9); border-radius: 50%; background: rgba(232, 176, 74, .12); pointer-events: none; }
