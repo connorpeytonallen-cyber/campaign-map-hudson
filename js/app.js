@@ -434,6 +434,7 @@
       { id: 'fog-edge', type: 'line', source: 'fog-soft', filter: ['==', ['get', 'active'], true], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#1c1c21', 'line-width': 34, 'line-blur': 28, 'line-opacity': 0.9 } },
       { id: 'fog-fill', type: 'fill', source: 'fog', filter: ['==', ['get', 'fill'], true], paint: { 'fill-pattern': 'fog-tex', 'fill-opacity': 0.98 } },
       { id: 'fog-wisp', type: 'fill', source: 'fog', filter: ['==', ['get', 'fill'], true], paint: { 'fill-pattern': 'fog-wisp', 'fill-opacity': 1, 'fill-opacity-transition': { duration: 0, delay: 0 } } },
+      { id: 'daylight', type: 'fill', source: 'daylight', paint: { 'fill-color': '#000', 'fill-opacity': 0, 'fill-opacity-transition': { duration: 1500, delay: 0 }, 'fill-color-transition': { duration: 1500, delay: 0 } } },
       { id: 'fog-line', type: 'line', source: 'fog', filter: ['==', ['get', 'outline'], true], layout: { visibility: 'none', 'line-join': 'round' }, paint: { 'line-color': '#c9c3b5', 'line-width': 1.5, 'line-dasharray': [2, 2], 'line-opacity': ['case', ['get', 'active'], 0.8, 0.4] } }
     );
     layers.push(
@@ -456,7 +457,7 @@
     const rl = layers.findIndex((l) => l.id === 'regions-line'), fe = layers.findIndex((l) => l.id === 'fog-haze');
     layers.splice(fe, 0, layers.splice(rl, 1)[0]);
     return { version: 8, sources: { base: source, regions: { type: 'geojson', data: empty }, /* Fog tiles are only cut up to a middling zoom and simply enlarged past it, so zooming in fast never
-    // waits on new fog tiles (which used to leave black squares for a moment). */ fog: { type: 'geojson', data: fogData.fog, maxzoom: 13 }, 'fog-soft': { type: 'geojson', data: fogData.soft, tolerance: 5, buffer: 256, maxzoom: 15 }, draft: { type: 'geojson', data: empty }, ruler: { type: 'geojson', data: empty } }, layers };
+    // waits on new fog tiles (which used to leave black squares for a moment). */ fog: { type: 'geojson', data: fogData.fog, maxzoom: 13 }, 'fog-soft': { type: 'geojson', data: fogData.soft, tolerance: 5, buffer: 256, maxzoom: 15 }, draft: { type: 'geojson', data: empty }, ruler: { type: 'geojson', data: empty }, daylight: { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[[-179, -84], [179, -84], [179, 84], [-179, 84], [-179, -84]]] } } } }, layers };
   }
 
   // ===== App state =====
@@ -515,7 +516,7 @@
       } catch (e) { shown = false; setTimeout(showBase, 200); }
     };
     map.on('sourcedata', (e) => { if (e.sourceId === 'fog' && map.isSourceLoaded('fog')) requestAnimationFrame(showBase); });
-    map.on('load', () => { styleReady = true; fitSize(); renderFog(); renderRegions(); setTimeout(showBase, 3000); });
+    map.on('load', () => { styleReady = true; fitSize(); renderFog(); renderRegions(); renderClock(); setTimeout(showBase, 3000); });
     map.on('styleimagemissing', (e) => { if ((e.id === 'fog-tex' || e.id === 'fog-wisp') && !map.hasImage(e.id)) { buildFogLook(); pushFogImages(); startFogAnim(); } });
     if (window.ResizeObserver) new ResizeObserver(() => fitSize()).observe(map.getContainer());
     lockZoom();
@@ -1575,9 +1576,9 @@
     } catch (e) { relayState = 'offline'; renderParty(); return; }
     relay.on('connect', () => {
       relayState = 'live';
-      relay.subscribe([`${ROOM}/p/+`, `${ROOM}/rename/${me.id}`, `${ROOM}/dice/log`, `${ROOM}/kick/+`, `${ROOM}/sound`, `${ROOM}/sound/state`, `${ROOM}/abilities/${me.id}`, `${ROOM}/partypos`]);
+      relay.subscribe([`${ROOM}/p/+`, `${ROOM}/rename/${me.id}`, `${ROOM}/dice/log`, `${ROOM}/kick/+`, `${ROOM}/sound`, `${ROOM}/sound/state`, `${ROOM}/abilities/${me.id}`, `${ROOM}/partypos`, `${ROOM}/clock`]);
       if (editing) relay.subscribe([`${ROOM}/abilities/+`, `${ROOM}/sheet/+`]);
-      restorePartyPos();
+      restorePartyPos(); restoreClock();
       announce();
       resendSheetIfPending();
       renderParty();
@@ -1599,6 +1600,7 @@
     if (topic === `${ROOM}/sound` || topic === `${ROOM}/sound/state`) { onSoundMessage(topic, txt); return; }
     if (topic.startsWith(`${ROOM}/abilities/`)) { onAbilityMessage(topic.split('/').pop(), txt); return; }
     if (topic.startsWith(`${ROOM}/sheet/`)) { onSheetMessage(topic.split('/').pop(), txt); return; }
+    if (topic === `${ROOM}/clock`) { onClockMessage(txt); return; }
     if (topic === `${ROOM}/partypos`) { try { onPartyPosMessage(txt); } catch (e) { /* bad message */ } return; }
     if (topic === `${ROOM}/rename/${me.id}`) {
       if (!txt) return;
@@ -2754,7 +2756,7 @@
     announce(); renderParty(); renderDice(); renderSoundCtl();
     if (relay && relay.connected) relay.subscribe([`${ROOM}/abilities/+`, `${ROOM}/sheet/+`]);
     renderPartyToken(false);
-    restorePartyPos();
+    restorePartyPos(); restoreClock(); renderClock();
   }
 
   function exitEdit() {
@@ -2771,6 +2773,7 @@
     map.resize();
     announce(); renderParty(); renderDice(); renderSoundCtl();
     renderPartyToken(false);
+    clockOpen = false; renderClock();
     if (hadChanges) toast('Your unpublished changes are saved on this device. Open #edit again to finish and publish.', 'info', 7000);
   }
 
@@ -2872,7 +2875,7 @@
     const p = [round6(ll.lng), round6(ll.lat)];
     if (mode.type === 'brush') return;
     if (mode.type === 'pin') { cancelMode(true); placePin(p); }
-    else if (mode.type === 'party') { cancelMode(true); setPartyPos({ lng: p[0], lat: p[1], shown: true }); showList(); }
+    else if (mode.type === 'party') { cancelMode(true); setPartyPos(Object.assign({}, partyPos, { lng: p[0], lat: p[1], shown: true })); showList(); }
     else if (mode.type === 'quest') {
       const q = byQuest(mode.id);
       cancelMode(true);
@@ -3222,6 +3225,11 @@
       r.appendChild(btn('Find it', 'small ghost', () => map.easeTo({ center: [partyPos.lng, partyPos.lat], duration: 600 })));
       r.appendChild(btn(partyPos.shown ? 'Hide from players' : 'Show to players', 'small ghost', () => { setPartyPos(Object.assign({}, partyPos, { shown: !partyPos.shown })); showList(); }));
       pt.appendChild(r);
+      const tr = el('div', 'party-travel');
+      tr.appendChild(selectInput(Object.entries(TRAVEL).map(([k, v]) => [k, v.name]), partyTravel.mode, (v) => { partyTravel.mode = v; savePartyTravel(); }));
+      tr.appendChild(selectInput(PACES.map(([n], i) => [String(i), n + ' pace']), String(partyTravel.pace), (v) => { partyTravel.pace = +v; savePartyTravel(); }));
+      tr.title = 'How they travel when you move the token (used to move the clock)';
+      pt.appendChild(tr);
       const st = el('div', 'party-status');
       PARTY_STATUS.forEach(([k, label]) => st.appendChild(btn(label, 'small st-' + k + (partyPos.status === k ? ' on' : ''), () => { setPartyPos(Object.assign({}, partyPos, { status: k })); showList(); })));
       pt.appendChild(st);
@@ -3634,7 +3642,11 @@
   const PARTY_POS_KEY = () => 'campaign-map.partyPos:' + SITE_KEY;
   // How beat up the party is: the token's colour.
   const PARTY_STATUS = [['good', 'Healthy'], ['hurt', 'Battered'], ['bad', 'In bad shape']];
-  let partyPos = null, partyMarker = null, partyDragging = false, partyAnim = 0, partySendTimer = null;
+  let partyPos = null, partyMarker = null, partyDragging = false, partyAnim = 0, partySendTimer = null, partyDragFrom = null;
+  // How the party is travelling when the DM moves the token (sets how much the clock moves).
+  const PARTY_TRAVEL_KEY = 'campaign-map.partyTravel';
+  const partyTravel = (() => { const p = lsGet(PARTY_TRAVEL_KEY, {}) || {}; return { mode: TRAVEL[p.mode] ? p.mode : 'foot', pace: [0, 1, 2].includes(p.pace) ? p.pace : 0, advance: p.advance !== false }; })();
+  const savePartyTravel = () => lsSet(PARTY_TRAVEL_KEY, partyTravel);
   function cleanPartyPos(p) {
     if (!p || typeof p !== 'object' || num(p.lng) == null || num(p.lat) == null) return null;
     return { lng: num(p.lng), lat: num(p.lat), shown: p.shown !== false, status: PARTY_STATUS.some(([k]) => k === p.status) ? p.status : 'good', ts: num(p.ts) || 0 };
@@ -3652,8 +3664,10 @@
     lsSet(PARTY_POS_KEY(), partyPos);
     if (relay && relay.connected) relay.publish(`${ROOM}/partypos`, JSON.stringify(partyPos), { retain: true });
   }
-  function setPartyPos(p) {
+  function setPartyPos(p, from) {
+    const prev = from || (partyPos && [partyPos.lng, partyPos.lat]);
     partyPos = Object.assign(cleanPartyPos(p) || {}, { ts: Date.now() });
+    if (prev && editing) travelClock(prev, [partyPos.lng, partyPos.lat]);
     sendPartyPos();
     renderPartyToken(false);
   }
@@ -3674,7 +3688,7 @@
       elx.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2a1 1 0 0 1 1 1v1.1A5 5 0 0 1 17 9v7l1.6 2.2A1 1 0 0 1 17.8 20H6.2a1 1 0 0 1-.8-1.8L7 16V9a5 5 0 0 1 4-4.9V3a1 1 0 0 1 1-1zm0 6.2c-.9 1.2-2 2.4-2 3.8a2 2 0 0 0 4 0c0-1.4-1.1-2.6-2-3.8zM9.5 21h5a2.5 2.5 0 0 1-5 0z"/></svg><span class="party-token-label">The party</span>';
       elx.title = 'The party';
       partyMarker = new maplibregl.Marker({ element: elx, anchor: 'center' }).setLngLat([partyPos.lng, partyPos.lat]).addTo(map);
-      partyMarker.on('dragstart', () => { partyDragging = true; });
+      partyMarker.on('dragstart', () => { partyDragging = true; partyDragFrom = partyPos ? [partyPos.lng, partyPos.lat] : null; });
       partyMarker.on('drag', () => {
         const ll = partyMarker.getLngLat();
         partyPos = Object.assign({}, partyPos, { lng: round6(ll.lng), lat: round6(ll.lat), ts: Date.now() });
@@ -3683,7 +3697,8 @@
       partyMarker.on('dragend', () => {
         partyDragging = false;
         const ll = partyMarker.getLngLat();
-        setPartyPos(Object.assign({}, partyPos, { lng: round6(ll.lng), lat: round6(ll.lat) }));
+        setPartyPos(Object.assign({}, partyPos, { lng: round6(ll.lng), lat: round6(ll.lat) }), partyDragFrom);
+        partyDragFrom = null;
       });
       animate = false;
     }
@@ -3703,6 +3718,129 @@
       if (k < 1) partyAnim = requestAnimationFrame(step);
     };
     partyAnim = requestAnimationFrame(step);
+  }
+
+  // ===== In-game clock: the DM sets it, moving the party advances it, the map darkens at night =====
+  // Time is counted in minutes since 6:00 AM on Day 1; each day runs 6 AM to 6 AM.
+  const CLOCK_KEY = () => 'campaign-map.clock:' + SITE_KEY;
+  const DAY_START = 360; // 6:00 AM
+  let clock = null, clockOpen = false;
+  const cleanClock = (c) => (c && typeof c === 'object' && num(c.abs) != null ? { abs: Math.max(0, Math.round(num(c.abs))), ts: num(c.ts) || 0 } : null);
+  const clockDay = (abs) => Math.floor(abs / 1440) + 1;
+  const clockTod = (abs) => (DAY_START + abs) % 1440; // minutes after midnight
+  const isNight = (tod) => tod >= 20 * 60 || tod < 6 * 60;
+  function fmtClock(tod) {
+    const h = Math.floor(tod / 60), m = tod % 60;
+    return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+  }
+  function dayPhase(tod) {
+    const h = tod / 60;
+    return h < 4 ? 'Dead of night' : h < 6 ? 'Before dawn' : h < 8 ? 'Dawn' : h < 12 ? 'Morning' : h < 14 ? 'Midday' : h < 18 ? 'Afternoon' : h < 20 ? 'Dusk' : 'Night';
+  }
+  function setClock(abs, note) {
+    clock = { abs: Math.max(0, Math.round(abs)), ts: Date.now() };
+    lsSet(CLOCK_KEY(), clock);
+    if (relay && relay.connected) relay.publish(`${ROOM}/clock`, JSON.stringify(clock), { retain: true });
+    renderClock();
+    if (note) toast(note, 'info', 4500);
+  }
+  function onClockMessage(txt) {
+    let c = null;
+    try { c = txt ? cleanClock(JSON.parse(txt)) : null; } catch (e) { return; }
+    if (c && clock && c.ts && c.ts < clock.ts) return;
+    clock = c;
+    renderClock();
+  }
+  function restoreClock() {
+    setTimeout(() => {
+      if (!editing || clock) return;
+      const saved = cleanClock(lsGet(CLOCK_KEY(), null));
+      if (saved) setClock(saved.abs);
+    }, 2500);
+  }
+  // Travel time for a move, walking the clock forward: travel at night goes at half speed.
+  function travelClock(fromLL, toLL) {
+    if (!clock || !partyTravel.advance) return;
+    const real = realMiles(fromLL, toLL);
+    if (real < 0.01) return;
+    const t = routeTime(real, partyTravel.mode, partyTravel.pace);
+    let left = t.hours, abs = clock.abs, guard = 0;
+    while (left > 1e-6 && guard++ < 60 * 24 * 6) { // 10-minute steps, at most 60 days
+      const step = isNight(clockTod(abs)) ? 1 / 12 : 1 / 6;
+      left -= step; abs += 10;
+    }
+    const spent = abs - clock.abs;
+    setClock(abs, `${TRAVEL[partyTravel.mode].name}, ${PACES[partyTravel.pace][0].toLowerCase()}: ${fmtMi(t.travelMi)} miles took ${fmtDuration(spent / 60, 24)}. It’s now ${fmtClock(clockTod(abs))}, Day ${clockDay(abs)}.`);
+  }
+  // How the map looks at each hour: [hour, colour, opacity] (a dark wash at night, warm at dawn and dusk).
+  const DAYLIGHT = [[0, '#02051a', .55], [4.5, '#02051a', .55], [6, '#ff8f4d', .16], [7.5, '#fff1d6', .05], [16.5, '#fff1d6', .05], [18.5, '#ff6a3d', .16], [20, '#0a0f30', .42], [24, '#02051a', .55]];
+  function daylightAt(tod) {
+    const h = tod / 60;
+    let i = 0;
+    while (i < DAYLIGHT.length - 2 && h >= DAYLIGHT[i + 1][0]) i++;
+    const [h0, c0, o0] = DAYLIGHT[i], [h1, c1, o1] = DAYLIGHT[i + 1], f = h1 > h0 ? (h - h0) / (h1 - h0) : 0;
+    const a = hexRgb(c0), b = hexRgb(c1);
+    return { color: `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * f)).join(',')})`, opacity: o0 + (o1 - o0) * f };
+  }
+  function applyDaylight() {
+    if (!styleReady || !map.getLayer('daylight')) return;
+    const d = clock ? daylightAt(clockTod(clock.abs)) : { color: '#000', opacity: 0 };
+    try { map.setPaintProperty('daylight', 'fill-color', d.color); map.setPaintProperty('daylight', 'fill-opacity', d.opacity); } catch (e) { /* busy */ }
+  }
+  function renderClock() {
+    applyDaylight();
+    let box = $('#clock');
+    if (!box && map) { box = el('div'); box.id = 'clock'; map.getContainer().appendChild(box); }
+    if (!box) return;
+    box.innerHTML = '';
+    if (!clock && !editing) { box.hidden = true; return; }
+    box.hidden = false;
+    const face = el('button', 'clock-face');
+    face.type = 'button';
+    if (clock) {
+      const tod = clockTod(clock.abs);
+      face.innerHTML = (isNight(tod)
+        ? '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M20 15.5A8.5 8.5 0 0 1 8.5 4a8.5 8.5 0 1 0 11.5 11.5z"/></svg>'
+        : '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>');
+      face.appendChild(el('span', 'clock-day', 'Day ' + clockDay(clock.abs)));
+      face.appendChild(el('b', 'clock-time', fmtClock(tod)));
+      face.appendChild(el('span', 'clock-phase', dayPhase(tod)));
+      box.classList.toggle('night', isNight(tod));
+    } else face.appendChild(el('span', 'clock-phase', 'Start the clock'));
+    if (editing) face.onclick = () => { clockOpen = !clockOpen; renderClock(); };
+    else face.disabled = true;
+    box.appendChild(face);
+    if (editing && clockOpen) box.appendChild(clockPanel());
+  }
+  function clockPanel() {
+    const p = el('div', 'clock-panel');
+    const cur = clock || { abs: 0 };
+    const dayIn = el('input'); dayIn.type = 'number'; dayIn.min = '1'; dayIn.max = '9999'; dayIn.value = String(clockDay(cur.abs));
+    const timeIn = el('input'); timeIn.type = 'time'; timeIn.step = '300';
+    const tod = clockTod(cur.abs); timeIn.value = String(Math.floor(tod / 60)).padStart(2, '0') + ':' + String(tod % 60).padStart(2, '0');
+    const row = el('div', 'clock-row');
+    row.appendChild(field('Day', dayIn)); row.appendChild(field('Time', timeIn));
+    p.appendChild(row);
+    p.appendChild(el('p', 'tip', 'Each day starts at 6:00 AM, so 2:00 AM belongs to the night at the end of that day.'));
+    p.appendChild(btn(clock ? 'Set time' : 'Start the clock', 'small primary', () => {
+      const [h, m] = (timeIn.value || '06:00').split(':').map((v) => +v || 0);
+      const d = Math.max(1, Math.round(+dayIn.value || 1));
+      setClock((d - 1) * 1440 + (((h * 60 + m) - DAY_START + 1440) % 1440));
+    }));
+    if (clock) {
+      const q = el('div', 'btn-row');
+      q.appendChild(btn('+1 hour', 'small', () => setClock(clock.abs + 60)));
+      q.appendChild(btn('+4 hours', 'small', () => setClock(clock.abs + 240)));
+      q.appendChild(btn('−1 hour', 'small ghost', () => setClock(clock.abs - 60)));
+      p.appendChild(q);
+      p.appendChild(btn('Skip to 6:00 AM (next day)', 'small accent', () => setClock((Math.floor(clock.abs / 1440) + 1) * 1440)));
+      const al = el('label', 'check');
+      const ac = el('input'); ac.type = 'checkbox'; ac.checked = partyTravel.advance;
+      ac.onchange = () => { partyTravel.advance = ac.checked; savePartyTravel(); };
+      al.appendChild(ac); al.appendChild(document.createTextNode(' Moving the party moves the clock'));
+      p.appendChild(al);
+    }
+    return p;
   }
 
   // --- Ruler: measure a route and see how long the party takes ---
