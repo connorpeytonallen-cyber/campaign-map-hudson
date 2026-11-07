@@ -10,7 +10,9 @@
 
   // ===== Settings =====
   const LOCK_BOUNDS = [[-80.3468, 32.6128], [-79.4618, 33.0272]]; // the area from your screenshot
-  const CARTO_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json';
+  const CREDIT = '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">&copy; OpenStreetMap</a> ' +
+    '<a href="https://carto.com/attributions" target="_blank" rel="noopener">&copy; CARTO</a>';
+  const CARTO_STYLE ='https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json';
   const DATA_PATH = 'data/map-data.js';
   const IMAGE_DIR = 'images/';
   const POLL_MS = 45000; // how often open maps check for your updates
@@ -386,10 +388,7 @@
     if (!res.ok) throw new Error('style ' + res.status);
     const carto = await res.json();
     const key = Object.keys(carto.sources).find((k) => carto.sources[k].type === 'vector');
-    const source = Object.assign({}, carto.sources[key], {
-      attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">&copy; OpenStreetMap</a> ' +
-        '<a href="https://carto.com/attributions" target="_blank" rel="noopener">&copy; CARTO</a>'
-    });
+    const source = Object.assign({}, carto.sources[key], { attribution: '' });
     const empty = { type: 'FeatureCollection', features: [] };
     const layers = baseLayers('base');
     const at = layers.findIndex((l) => l.id === 'roads-minor');
@@ -444,10 +443,12 @@
       container: 'map', style, bounds: LOCK_BOUNDS, maxBounds: LOCK_BOUNDS, maxZoom: 18,
       attributionControl: false, dragRotate: false, pitchWithRotate: false, touchPitch: false, renderWorldCopies: false
     });
-    map.touchZoomRotate.disableRotation();
     if (map.keyboard && map.keyboard.disableRotation) map.keyboard.disableRotation();
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-left');
-    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
+    // Zoom buttons plus a compass (click it to point north again).
+    map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: false }), 'bottom-left');
+    // The map data's required credit, as small text instead of the "i" button.
+    map.addControl(new maplibregl.AttributionControl({ compact: false, customAttribution: CREDIT }), 'bottom-left');
+    setupRotate();
     popup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, maxWidth: 'none', className: 'loc-popup', focusAfterOpen: false });
     popup.on('close', () => { popupKey = null; highlight(null); });
     map.on('load', () => { styleReady = true; fitSize(); renderFog(); renderRegions(); });
@@ -485,6 +486,37 @@
     const unseen = unseenQuests().length;
     if (unseen) toast(`${unseen} new quest${unseen === 1 ? '' : 's'} in your logbook`, 'quest', 9000, () => toggleLog(true, 'quests'));
     checkHash();
+  }
+
+  // Hold the left and right mouse buttons together and drag sideways to rotate the map.
+  function setupRotate() {
+    const cont = map.getCanvasContainer();
+    let rot = null;
+    const end = () => {
+      if (!rot) return;
+      rot = null;
+      cont.classList.remove('rotating');
+      if (!(mode && mode.type === 'brush')) map.dragPan.enable();
+    };
+    cont.addEventListener('mousedown', (e) => {
+      if ((e.buttons & 3) !== 3) return;
+      rot = { x: e.clientX, bearing: map.getBearing() };
+      map.dragPan.disable();
+      cont.classList.add('rotating');
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!rot) return;
+      if ((e.buttons & 3) !== 3) { end(); return; }
+      map.setBearing(rot.bearing + (e.clientX - rot.x) * 0.5);
+    });
+    window.addEventListener('mouseup', (e) => { if ((e.buttons & 3) !== 3) end(); });
+    window.addEventListener('blur', end);
+    cont.addEventListener('contextmenu', (e) => e.preventDefault());
+    // Compass: point north again.
+    map.getContainer().addEventListener('click', (e) => {
+      if (e.target.closest && e.target.closest('.maplibregl-ctrl-compass')) map.easeTo({ bearing: 0, duration: 400 });
+    }, true);
   }
 
   // If the page was opened in a hidden tab, the map can start at a tiny default size: fix it.
@@ -2060,7 +2092,8 @@
   const statTotal = (s, k) => { const bg = bgOf(s); return Math.min(STAT_MAX, s.stats[k] + ((bg && bg[2][k]) || 0)); };
   const SUB_MAX = 10;
   const subCap = (n) => (n === 'Evasion' ? 9 : SUB_MAX); // Evasion stops at 9 so AC never passes 19
-  const subValue = (s, k, n) => Math.min(subCap(n), Math.max(1, statTotal(s, k) + (s.subs[n] || 0)));
+  // A sub-stat starts at its parent stat's bonus; level-up points raise it by 1 each, up to +10 (Evasion +9).
+  const subValue = (s, k, n) => Math.min(subCap(n), statBonus(statTotal(s, k)) + (s.subs[n] || 0));
   const LEVEL_POINTS = 2; // sub-stat points per level after the first
   const levelPoints = (s) => (s.level - 1) * LEVEL_POINTS;
   const levelSpent = (s) => Object.values(s.subs).reduce((sum, v) => sum + Math.max(0, v || 0), 0);
@@ -2190,19 +2223,18 @@
         }));
         row.appendChild(st);
         const v = subValue(s, k, n);
-        row.appendChild(el('span', 'cs-subval', String(v)));
-        row.appendChild(btn(fmtBonus(statBonus(v)), 'small cs-roll', () => rollCheck(n + ' check', statBonus(v))));
+        row.appendChild(btn(fmtBonus(v), 'small cs-roll', () => rollCheck(n + ' check', v)));
         card.appendChild(row);
       });
       body.appendChild(card);
     });
-    body.appendChild(el('p', 'cs-hint', `Sub-stats start at their parent stat and go up to ${SUB_MAX} (Evasion 9). Each level after the first gives ${LEVEL_POINTS} points to put into sub-stats. Hover a stat for what it does.`));
+    body.appendChild(el('p', 'cs-hint', `Sub-stats start at their stat’s bonus and go up to +${SUB_MAX} (Evasion +9). Each level after the first gives ${LEVEL_POINTS} points to put into sub-stats. Hover a stat for what it does.`));
 
     section('Combat profile');
     const vit = subValue(s, 'endurance', 'Vitality'), eva = subValue(s, 'outlook', 'Evasion'), spd = subValue(s, 'reflex', 'Speed');
     const combat = el('div', 'cs-combat');
-    [['Max health', 10 + statBonus(vit) * s.level, `10 + Vitality bonus (${fmtBonus(statBonus(vit))}) × level ${s.level}`],
-      ['Armor class', Math.min(19, 10 + eva), `10 + Evasion (${eva}), max 19`],
+    [['Max health', 10 + vit * s.level, `10 + Vitality (${fmtBonus(vit)}) × level ${s.level}`],
+      ['Armor class', Math.min(19, 10 + eva), `10 + Evasion (${fmtBonus(eva)}), max 19`],
       ['Turn order (Speed)', spd, 'Higher Speed acts first']].forEach(([l, v, h]) => {
       const c = el('div', 'cs-cbox');
       c.appendChild(el('span', 'cs-clabel', l));

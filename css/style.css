@@ -15,7 +15,10 @@ body.editing #map { right: 360px; }
 .maplibregl-ctrl-group button:not(:disabled):hover { background-color: #26262b; }
 .maplibregl-ctrl.maplibregl-ctrl-attrib, .maplibregl-ctrl-attrib.maplibregl-compact { background: rgba(12, 12, 14, .75); color: #8d8a83; }
 .maplibregl-ctrl-attrib a { color: #a9a59c; }
-.maplibregl-ctrl-attrib-button { filter: invert(1) brightness(.8); background-color: transparent !important; }
+.maplibregl-ctrl-attrib-button { display: none !important; }
+.maplibregl-ctrl.maplibregl-ctrl-attrib { margin: 0 0 4px 6px !important; padding: 0 4px; background: transparent !important; font-size: 9px; line-height: 1.4; opacity: .55; }
+.maplibregl-ctrl-attrib a { color: #8d8a83 !important; }
+.maplibregl-canvas-container.rotating, .maplibregl-canvas-container.rotating canvas { cursor: ew-resize !important; }
 
 /* Map name overlay */
 #map-title {
