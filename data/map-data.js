@@ -2975,11 +2975,11 @@ window.MAP_DATA = {
       "id": "pmw4fyq1snq33",
       "kind": "settlement",
       "name": "Camp Harmony",
-      "description": "",
+      "description": "\"A shantytown of tents, tin shacks and gutted railcars, ringed by a fence of doors, bed frames and sheet tin. It’s ugly, crowded and smells of smoke, but it runs.\"",
       "lng": -79.903288,
       "lat": 32.788645,
-      "titleFont": "",
-      "bodyFont": "",
+      "titleFont": "IM Fell English",
+      "bodyFont": "IM Fell English",
       "textSize": "",
       "color": "#2ec4b6",
       "image": "",
@@ -2989,10 +2989,10 @@ window.MAP_DATA = {
       "shops": [
         {
           "id": "pmw4hi82pbhet",
-          "name": "",
-          "keeper": "",
-          "description": "",
-          "items": "",
+          "name": "The General Store",
+          "keeper": "Dot",
+          "description": "“A railway boxcar with one side cut open. A woman sits inside on an upturned crate with a ledger on her knee, and everything behind her has a price chalked on it.”",
+          "items": "-Rations $15 each 2x Available\n-Pistol rounds $6 each, rifle rounds $8 each, shotgun shells $10 each.\n-Bandages (1d4) $20. \n-Lamp oil $10. \n-Rope $10.\n-Fuel, enough for two trips, $100.\n",
           "image": ""
         }
       ],
