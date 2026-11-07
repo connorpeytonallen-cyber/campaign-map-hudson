@@ -1509,7 +1509,20 @@
   // ===== Dice roller (bottom left): a shared, read-only feed of rolls =====
   const DICE = [4, 6, 8, 10, 12, 20];
   const DICE_LOG_MAX = 60, DICE_OPEN_KEY = 'campaign-map.diceOpen', HIDDEN_KEY = 'campaign-map.hiddenRolls:' + SITE_KEY;
-  let diceLog = [], diceSides = 20, diceCount = 1, diceMod = 0, diceFor = '', diceHidden = false, diceUnread = 0, diceClearedAt = 0, diceNextLabel = '';
+  let diceLog = [], diceSides = 20, diceCount = 1, diceMod = 0, diceFor = '', diceHidden = false, diceUnread = 0, diceClearedAt = 0, diceNextLabel = '', diceAdv = '';
+  // Advantage / disadvantage: roll each die twice, keep the higher / lower.
+  function rollSet(count, sides, adv) {
+    const results = [], dropped = [];
+    for (let i = 0; i < count; i++) {
+      const a = rollDie(sides);
+      if (!adv) { results.push(a); continue; }
+      const b = rollDie(sides);
+      const keep = adv === 'adv' ? Math.max(a, b) : Math.min(a, b);
+      results.push(keep);
+      dropped.push(keep === a ? b : a);
+    }
+    return { results, dropped };
+  }
   function rollDie(n) {
     const a = new Uint32Array(1), lim = Math.floor(0x100000000 / n) * n;
     let x;
@@ -1528,7 +1541,9 @@
       id: x.id.slice(0, 40), byId: str(x.byId).slice(0, 40), by: cleanName(x.by) || 'Someone', color: safeColor(x.color, PIN_COLORS[0]),
       dm: !!x.dm, forName: cleanName(x.forName), forColor: safeColor(x.forColor, ''), sides, count: results.length, mod, results,
       total: results.reduce((s, v) => s + v, 0) + mod, ts: num(x.ts) || 0, revealed: !!x.revealed,
-      label: str(x.label).replace(/\s+/g, ' ').trim().slice(0, 40)
+      label: str(x.label).replace(/\s+/g, ' ').trim().slice(0, 40),
+      adv: x.adv === 'adv' || x.adv === 'dis' ? x.adv : '',
+      dropped: arr(x.dropped).map(Number).filter((v) => Number.isInteger(v) && v >= 1 && v <= sides).slice(0, 20)
     };
   }
   function mergeRolls(list) {
@@ -1567,12 +1582,14 @@
   }
   function doRoll() {
     if (isKicked()) { toast('You were removed from the session, so you can’t roll.', 'warn'); return; }
-    const results = Array.from({ length: diceCount }, () => rollDie(diceSides));
+    const { results, dropped } = rollSet(diceCount, diceSides, diceAdv);
+    const adv = diceAdv;
+    diceAdv = '';
     const target = editing && diceFor ? party.get(diceFor) : null;
     const e = {
       id: uid(), byId: me.id, by: me.name || 'Someone', color: me.color, dm: editing,
       forName: target ? target.name : '', forColor: target ? target.color : '', sides: diceSides, count: diceCount, mod: diceMod,
-      results, total: results.reduce((s, v) => s + v, 0) + diceMod, ts: Date.now(), revealed: false, label: diceNextLabel
+      results, total: results.reduce((s, v) => s + v, 0) + diceMod, ts: Date.now(), revealed: false, label: diceNextLabel, adv, dropped
     };
     if (editing && diceHidden) {
       // Hidden rolls never leave your device until you reveal them.
@@ -1614,6 +1631,7 @@
     }
     who.appendChild(document.createTextNode(' ' + diceLabel(e.count, e.sides, e.mod)));
     if (e.label) who.appendChild(el('span', 'roll-label', ' · ' + e.label));
+    if (e.adv) who.appendChild(el('span', 'roll-tag ' + e.adv, e.adv === 'adv' ? 'advantage' : 'disadvantage'));
     if (e.revealed) who.appendChild(el('span', 'roll-tag', 'revealed'));
     if (hidden) who.appendChild(el('span', 'roll-tag dm', 'hidden'));
     body.appendChild(who);
@@ -1624,6 +1642,7 @@
       if (e.sides === 20 && v === 1) d.classList.add('fumble');
       res.appendChild(d);
     });
+    (e.dropped || []).forEach((v) => res.appendChild(el('span', 'roll-die dropped', String(v))));
     if (e.mod) res.appendChild(el('span', 'roll-mod', (e.mod > 0 ? '+ ' : '− ') + Math.abs(e.mod)));
     res.appendChild(el('span', 'roll-total', '= ' + e.total));
     body.appendChild(res);
@@ -1703,6 +1722,16 @@
     const roll = btn('Roll', 'primary dice-roll', () => doRoll());
     row.appendChild(roll);
     c.appendChild(row);
+    const advRow = el('div', 'dice-row dice-adv');
+    [['', 'Normal'], ['adv', 'Advantage'], ['dis', 'Disadvantage']].forEach(([v, l]) => {
+      const b = el('button', 'die adv-opt', l);
+      b.type = 'button';
+      b.dataset.adv = v;
+      b.title = v === 'adv' ? 'Roll twice, keep the higher' : v === 'dis' ? 'Roll twice, keep the lower' : 'Roll once';
+      b.onclick = () => { diceAdv = v; fillDiceControls(); };
+      advRow.appendChild(b);
+    });
+    c.insertBefore(advRow, c.lastChild);
     const dm = el('div', 'dice-row dice-dm');
     const forL = el('label', 'dice-for', 'Roll for');
     const sel = el('select');
@@ -1732,9 +1761,10 @@
   function fillDiceControls() {
     const box = $('#dice');
     if (!box || !box.querySelector('.dice-controls')) return;
-    box.querySelectorAll('.die').forEach((b) => b.classList.toggle('on', +b.dataset.sides === diceSides));
+    box.querySelectorAll('.die:not(.adv-opt)').forEach((b) => b.classList.toggle('on', +b.dataset.sides === diceSides));
+    box.querySelectorAll('.adv-opt').forEach((b) => b.classList.toggle('on', b.dataset.adv === diceAdv));
     box.querySelector('.dice-n').textContent = String(diceCount);
-    box.querySelector('.dice-roll').textContent = (editing && diceHidden ? 'Roll hidden ' : 'Roll ') + diceLabel(diceCount, diceSides, diceMod) + (diceNextLabel ? ' · ' + diceNextLabel : '');
+    box.querySelector('.dice-roll').textContent = (editing && diceHidden ? 'Roll hidden ' : 'Roll ') + diceLabel(diceCount, diceSides, diceMod) + (diceAdv === 'adv' ? ' (adv)' : diceAdv === 'dis' ? ' (dis)' : '') + (diceNextLabel ? ' · ' + diceNextLabel : '');
     const modIn = box.querySelector('.dice-mod input');
     if (modIn && document.activeElement !== modIn) modIn.value = String(diceMod);
     box.querySelectorAll('.dice-dm').forEach((row) => { row.hidden = !editing; });
@@ -1969,7 +1999,7 @@
     const stats = {}, subs = {};
     PROWESS.forEach(([k, , list]) => {
       stats[k] = Math.min(STAT_MAX, Math.max(1, Math.round(num(s.stats && s.stats[k]) || 1)));
-      list.forEach((n) => { subs[n] = Math.max(-5, Math.min(10, Math.round(num(s.subs && s.subs[n]) || 0))); });
+      list.forEach((n) => { subs[n] = Math.max(0, Math.min(10, Math.round(num(s.subs && s.subs[n]) || 0))); });
     });
     const t = (k) => str(s[k]);
     return {
@@ -2029,13 +2059,50 @@
   const bgOf = (s) => BACKGROUNDS.find((b) => b[1] === s.background);
   const statTotal = (s, k) => { const bg = bgOf(s); return Math.min(STAT_MAX, s.stats[k] + ((bg && bg[2][k]) || 0)); };
   const SUB_MAX = 10;
-  const subValue = (s, k, n) => Math.min(SUB_MAX, Math.max(1, statTotal(s, k) + (s.subs[n] || 0)));
+  const subCap = (n) => (n === 'Evasion' ? 9 : SUB_MAX); // Evasion stops at 9 so AC never passes 19
+  const subValue = (s, k, n) => Math.min(subCap(n), Math.max(1, statTotal(s, k) + (s.subs[n] || 0)));
+  const LEVEL_POINTS = 2; // sub-stat points per level after the first
+  const levelPoints = (s) => (s.level - 1) * LEVEL_POINTS;
+  const levelSpent = (s) => Object.values(s.subs).reduce((sum, v) => sum + Math.max(0, v || 0), 0);
+  const STAT_INFO = {
+    Power: 'Raw physical strength and the force behind your actions.',
+    Reflex: 'Quickness, coordination and fine control of your body.',
+    Outlook: 'Awareness of your surroundings, of people, and of danger.',
+    Wit: 'Reasoning, memory and learned knowledge.',
+    Endurance: 'Health, stamina and how much punishment you can take.',
+    Social: 'Your presence: how you sway, scare and hold yourself with others.',
+    Serendipity: 'Luck, and the knack for being in the right place at the right time.',
+    Force: 'Raw physical power: lifting, pushing, grappling and breaking restraints.',
+    Control: 'Resisting forced movement, knockdowns, grapples and being thrown off balance.',
+    Impact: 'Adds to the damage of melee and strength-based attacks.',
+    Speed: 'Turn order, reaction timing and movement speed in combat.',
+    Performance: 'Balance, coordination and demanding physical actions under pressure.',
+    'Sleight of Hand': 'Precise handiwork, concealment and delicate motor skills.',
+    Sense: 'Perception, spotting things and general awareness.',
+    Insight: 'Reading intent, motives, lies and body language.',
+    Evasion: 'Avoiding attacks and physical threats. Adds to your AC (max 9).',
+    Logic: 'Problem solving, technical work, analysis and complex reasoning.',
+    Memory: 'Recalling learned information, details and things you saw.',
+    History: 'Knowledge of lore, cultures, sciences and recorded events.',
+    Vitality: 'Total health, stamina and resistance to exhaustion. Sets your max HP.',
+    Recovery: 'How well you heal, resist toxins and shake off fatigue.',
+    Tolerance: 'Injury thresholds, wound resistance and physical stress limits.',
+    Intimidation: 'Coercion, fear and dominance through presence or threat.',
+    Persuasion: 'Influence, negotiation and changing minds by talking.',
+    Composure: 'Keeping your emotions in check under pressure and hiding reactions.',
+    Luck: 'Shifts in probability, critical swings and rare lucky breaks.',
+    Fortune: 'The quality of rewards, loot and useful finds.',
+    Opportunity: 'Spotting and making the most of advantageous moments.'
+  };
   const pointsUsed = (s) => PROWESS.reduce((sum, [k]) => sum + (s.stats[k] - 1), 0);
   // Roll d20 + bonus straight into the dice feed.
   function rollCheck(label, bonus) {
     if (isKicked()) { toast('You were removed from the session, so you can’t roll.', 'warn'); return; }
-    const r = rollDie(20);
-    const e = { id: uid(), byId: me.id, by: me.name || 'Someone', color: me.color, dm: editing, forName: '', forColor: '', sides: 20, count: 1, mod: bonus, results: [r], total: r + bonus, ts: Date.now(), revealed: false, label };
+    const adv = diceAdv;
+    diceAdv = '';
+    const { results, dropped } = rollSet(1, 20, adv);
+    const r = results[0];
+    const e = { id: uid(), byId: me.id, by: me.name || 'Someone', color: me.color, dm: editing, forName: '', forColor: '', sides: 20, count: 1, mod: bonus, results, total: r + bonus, ts: Date.now(), revealed: false, label, adv, dropped };
     mergeRolls([e]);
     publishRolls();
     if (!lsGet(DICE_OPEN_KEY, false)) lsSet(DICE_OPEN_KEY, true);
@@ -2086,31 +2153,41 @@
 
     section('P.R.O.W.E.S.S');
     const left = STAT_POINTS - pointsUsed(s);
-    body.appendChild(el('div', 'cs-points' + (left < 0 ? ' over' : left === 0 ? ' done' : ''), `${left} of ${STAT_POINTS} points left to spend · every stat starts at 1 · click a bonus to roll it`));
+    const lvLeft = levelPoints(s) - levelSpent(s);
+    if (left > 0) body.appendChild(el('div', 'cs-points', `${left} of ${STAT_POINTS} points left to spend · every stat starts at 1 · click a bonus to roll it`));
+    else if (lvLeft > 0) body.appendChild(el('div', 'cs-points level', `${lvLeft}/${levelPoints(s)} level-up points left · put them into sub-stats`));
     PROWESS.forEach(([k, label, list]) => {
       const card = el('div', 'cs-stat');
       const top = el('div', 'cs-stat-top');
-      top.appendChild(el('b', 'cs-stat-name', label));
+      const nameEl = el('b', 'cs-stat-name', label);
+      nameEl.title = STAT_INFO[label];
+      top.appendChild(nameEl);
       const step = el('div', 'cs-step');
-      const minus = btn('−', 'small', () => { if (s.stats[k] > 1) { s.stats[k]--; rerender(); } });
-      const plus = btn('+', 'small', () => { if (s.stats[k] < STAT_MAX && pointsUsed(s) < STAT_POINTS) { s.stats[k]++; rerender(); } });
-      step.appendChild(minus);
-      step.appendChild(el('span', 'cs-base', String(s.stats[k])));
-      step.appendChild(plus);
-      top.appendChild(step);
       const adj = (bg && bg[2][k]) || 0;
       const total = statTotal(s, k);
-      top.appendChild(el('span', 'cs-adj', adj ? `+${adj} bg = ${total}` : `= ${total}`));
+      const minus = btn('−', 'small', () => { if (s.stats[k] > 1) { s.stats[k]--; rerender(); } });
+      const plus = btn('+', 'small', () => { if (statTotal(s, k) < STAT_MAX && pointsUsed(s) < STAT_POINTS) { s.stats[k]++; rerender(); } });
+      step.appendChild(minus);
+      const val = el('span', 'cs-base', String(total));
+      if (adj) { val.title = `Includes +${adj} from your background`; val.classList.add('has-bg'); }
+      step.appendChild(val);
+      step.appendChild(plus);
+      top.appendChild(step);
       top.appendChild(btn(fmtBonus(statBonus(total)), 'small cs-roll', () => rollCheck(label + ' check', statBonus(total))));
       card.appendChild(top);
       list.forEach((n) => {
         const row = el('div', 'cs-sub');
-        row.appendChild(el('span', 'cs-sub-name', n));
+        const sn = el('span', 'cs-sub-name', n);
+        sn.title = STAT_INFO[n];
+        row.appendChild(sn);
         const st = el('div', 'cs-step');
-        st.appendChild(btn('−', 'small', () => { if ((s.subs[n] || 0) > -5) { s.subs[n] = (s.subs[n] || 0) - 1; rerender(); } }));
+        st.appendChild(btn('−', 'small', () => { if ((s.subs[n] || 0) > 0) { s.subs[n] = (s.subs[n] || 0) - 1; rerender(); } }));
         const extra = s.subs[n] || 0;
-        st.appendChild(el('span', 'cs-extra', extra ? (extra > 0 ? '+' : '') + extra : '·'));
-        st.appendChild(btn('+', 'small', () => { if (subValue(s, k, n) < SUB_MAX) { s.subs[n] = (s.subs[n] || 0) + 1; rerender(); } }));
+        st.appendChild(el('span', 'cs-extra', extra > 0 ? '+' + extra : '·'));
+        st.appendChild(btn('+', 'small', () => {
+          if (levelPoints(s) - levelSpent(s) <= 0) { toast(s.level > 1 ? 'No level-up points left.' : 'You get 2 sub-stat points each time you level up.', 'info', 3500); return; }
+          if (subValue(s, k, n) < subCap(n)) { s.subs[n] = (s.subs[n] || 0) + 1; rerender(); }
+        }));
         row.appendChild(st);
         const v = subValue(s, k, n);
         row.appendChild(el('span', 'cs-subval', String(v)));
@@ -2119,7 +2196,7 @@
       });
       body.appendChild(card);
     });
-    body.appendChild(el('p', 'cs-hint', `Sub-stats start at their parent stat and go up to ${SUB_MAX}. Use their − and + for level-ups (each level adds 1 to one sub-stat), abilities or equipment.`));
+    body.appendChild(el('p', 'cs-hint', `Sub-stats start at their parent stat and go up to ${SUB_MAX} (Evasion 9). Each level after the first gives ${LEVEL_POINTS} points to put into sub-stats. Hover a stat for what it does.`));
 
     section('Combat profile');
     const vit = subValue(s, 'endurance', 'Vitality'), eva = subValue(s, 'outlook', 'Evasion'), spd = subValue(s, 'reflex', 'Speed');

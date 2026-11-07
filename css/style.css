@@ -310,6 +310,14 @@ body.editing #dice { right: 374px; }
 .cs-cval { font-size: 22px; color: #fbf6ea; }
 .cs-chint { color: #7f7b72; font-size: 10.5px; line-height: 1.3; }
 .roll-label { color: var(--accent); }
+.roll-die.dropped { opacity: .45; text-decoration: line-through; }
+.roll-tag.adv { background: rgba(76, 195, 138, .16); color: #6fd6a0; }
+.roll-tag.dis { background: rgba(224, 90, 90, .16); color: #ff8c8c; }
+.dice-adv { gap: 5px; }
+.dice-adv .adv-opt { flex: 1; font-size: 11.5px; }
+.cs-points.level { color: var(--accent); }
+.cs-base.has-bg { color: #6fd6a0; text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
+.cs-stat-name, .cs-sub-name { cursor: help; }
 .cs-inv { display: grid; grid-template-columns: 1fr 56px 30px; gap: 4px 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid #26262b; }
 #logbook .tab-body .cs-inv input { margin-top: 0; }
 #logbook .tab-body .cs-inv .cs-inv-notes { grid-column: 1 / -1; font-size: 13px; padding: 6px 8px; }
