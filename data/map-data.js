@@ -2968,6 +2968,7 @@ window.MAP_DATA = {
       "symbol": "ship",
       "symbolColor": "#141414",
       "scale": 1,
+      "throughFog": false,
       "shops": [],
       "npcs": []
     },
@@ -2986,6 +2987,7 @@ window.MAP_DATA = {
       "symbol": "cave",
       "symbolColor": "#141414",
       "scale": 0.7,
+      "throughFog": false,
       "shops": [
         {
           "id": "pmw4hi82pbhet",
@@ -3070,6 +3072,7 @@ window.MAP_DATA = {
       "symbol": "temple",
       "symbolColor": "#141414",
       "scale": 1.5,
+      "throughFog": false,
       "shops": [],
       "npcs": []
     },
@@ -3088,6 +3091,7 @@ window.MAP_DATA = {
       "symbol": "tent",
       "symbolColor": "",
       "scale": 0.7,
+      "throughFog": false,
       "shops": [],
       "npcs": []
     },
@@ -3106,6 +3110,7 @@ window.MAP_DATA = {
       "symbol": "gem",
       "symbolColor": "",
       "scale": 1,
+      "throughFog": false,
       "shops": [],
       "npcs": []
     },
@@ -3124,6 +3129,7 @@ window.MAP_DATA = {
       "symbol": "temple",
       "symbolColor": "",
       "scale": 1.5,
+      "throughFog": false,
       "shops": [],
       "npcs": []
     },
@@ -3142,6 +3148,7 @@ window.MAP_DATA = {
       "symbol": "swords",
       "symbolColor": "",
       "scale": 1,
+      "throughFog": true,
       "shops": [],
       "npcs": []
     }
@@ -6213,5 +6220,15 @@ window.MAP_DATA = {
   ],
   "stickers": [],
   "monsters": [],
-  "sounds": []
+  "sounds": [],
+  "fogStyle": {
+    "look": "smoke",
+    "darkness": 0.85,
+    "thickness": 0.98,
+    "tint": "#24242c",
+    "speed": 0.5,
+    "dir": 0,
+    "pulse": true,
+    "seed": 7
+  }
 };
