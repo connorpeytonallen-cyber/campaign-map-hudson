@@ -89,6 +89,16 @@
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const safeColor = (c, fallback = PIN_COLORS[0]) => (/^#[0-9a-f]{6}$/i.test(c || '') ? c.toLowerCase() : fallback);
   const fontInfo = (name) => FONTS.find((f) => f.name === name);
+  // Fog styles. base/wisp: [noise frequency, layers of detail, ridged (streaky)].
+  const FOG_LOOKS = {
+    smoke: { name: 'Smoke', base: [4, 5, false], contrast: 1.0, wisp: [3, 5, false], wispLo: 0.5, wispHi: 0.85, wispAmt: 0.55 },
+    mist: { name: 'Soft mist', base: [2, 5, false], contrast: 0.55, wisp: [3, 4, false], wispLo: 0.42, wispHi: 0.9, wispAmt: 0.4 },
+    storm: { name: 'Storm clouds', base: [4, 6, false], contrast: 1.7, wisp: [3, 5, true], wispLo: 0.6, wispHi: 0.95, wispAmt: 0.6 },
+    tendrils: { name: 'Eldritch tendrils', base: [4, 5, false], contrast: 0.8, wisp: [6, 4, true], wispLo: 0.72, wispHi: 0.97, wispAmt: 0.85 }
+  };
+  const FOG_DEFAULT = { look: 'smoke', darkness: 0.8, thickness: 0.98, tint: '#24242c', speed: 2, dir: 0, pulse: true, seed: 7 };
+  const FOG_TINTS = ['#24242c', '#2a3140', '#2b3a2f', '#3d2a2a', '#33293d', '#3b3526'];
+  const FOG_DIRS = [[0, 'East'], [45, 'Northeast'], [90, 'North'], [135, 'Northwest'], [180, 'West'], [225, 'Southwest'], [270, 'South'], [315, 'Southeast']];
   const validFont = (name, fallback) => (fontInfo(name) ? name : fallback);
   const fontStack = (name) => { const f = fontInfo(name) || FONTS[0]; return `'${f.name}', ${f.fallback}`; };
   const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
@@ -320,6 +330,18 @@
       const shape = normShape(f.shape) || (points.length >= 3 ? [[[...points, points[0]]]] : null);
       out.fog.push({ id: str(f.id) || uid(), name: str(f.name), active: f.active !== false, shape });
     }
+    const fs = d.fogStyle && typeof d.fogStyle === 'object' ? d.fogStyle : {};
+    const rng = (v, lo, hi, def) => { v = num(v); return v == null ? def : Math.min(hi, Math.max(lo, v)); };
+    out.fogStyle = {
+      look: FOG_LOOKS[fs.look] ? fs.look : FOG_DEFAULT.look,
+      darkness: rng(fs.darkness, 0, 1, FOG_DEFAULT.darkness),
+      thickness: rng(fs.thickness, 0.7, 1, FOG_DEFAULT.thickness),
+      tint: safeColor(fs.tint, FOG_DEFAULT.tint),
+      speed: rng(fs.speed, 0, 10, FOG_DEFAULT.speed),
+      dir: Math.round(rng(fs.dir, 0, 359, FOG_DEFAULT.dir)),
+      pulse: fs.pulse == null ? FOG_DEFAULT.pulse : !!fs.pulse,
+      seed: Math.round(rng(fs.seed, 1, 99999, FOG_DEFAULT.seed))
+    };
     return out;
   }
   // A region's coast-traced outline: [polygon[ring[[lng,lat]...]]], or null.
@@ -398,6 +420,7 @@
       { id: 'fog-haze', type: 'line', source: 'fog', filter: ['==', ['get', 'active'], true], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#1e1e24', 'line-width': 90, 'line-blur': 80, 'line-opacity': 0.55 } },
       { id: 'fog-edge', type: 'line', source: 'fog', filter: ['==', ['get', 'active'], true], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#1c1c21', 'line-width': 34, 'line-blur': 28, 'line-opacity': 0.9 } },
       { id: 'fog-fill', type: 'fill', source: 'fog', filter: ['==', ['get', 'active'], true], paint: { 'fill-pattern': 'fog-tex', 'fill-opacity': 0.98 } },
+      { id: 'fog-wisp', type: 'fill', source: 'fog', filter: ['==', ['get', 'active'], true], paint: { 'fill-pattern': 'fog-wisp', 'fill-opacity': 1, 'fill-opacity-transition': { duration: 0, delay: 0 } } },
       { id: 'fog-line', type: 'line', source: 'fog', layout: { visibility: 'none', 'line-join': 'round' }, paint: { 'line-color': '#c9c3b5', 'line-width': 1.5, 'line-dasharray': [2, 2], 'line-opacity': ['case', ['get', 'active'], 0.8, 0.4] } }
     );
     layers.push(
@@ -453,7 +476,7 @@
     popup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, maxWidth: 'none', className: 'loc-popup', focusAfterOpen: false });
     popup.on('close', () => { popupKey = null; highlight(null); });
     map.on('load', () => { styleReady = true; fitSize(); renderFog(); renderRegions(); });
-    map.on('styleimagemissing', (e) => { if (e.id === 'fog-tex' && !map.hasImage('fog-tex')) map.addImage('fog-tex', fogTexture()); });
+    map.on('styleimagemissing', (e) => { if ((e.id === 'fog-tex' || e.id === 'fog-wisp') && !map.hasImage(e.id)) { buildFogLook(); pushFogImages(); startFogAnim(); } });
     if (window.ResizeObserver) new ResizeObserver(() => fitSize()).observe(map.getContainer());
     lockZoom();
     window.addEventListener('resize', fitSize);
@@ -538,27 +561,115 @@
   }
 
   // ===== Fog of war =====
-  // A soft, smoky texture (made on the fly) so fog stands out from the dark map.
-  function fogTexture() {
-    const S = 256, c = document.createElement('canvas');
-    c.width = c.height = S;
-    const g = c.getContext('2d');
-    g.fillStyle = '#18181c';
-    g.fillRect(0, 0, S, S);
-    let seed = 7;
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    for (let i = 0; i < 70; i++) {
-      const x = rnd() * S, y = rnd() * S, r = 20 + rnd() * 80, a = 0.025 + rnd() * 0.05;
-      for (const dx of [-S, 0, S]) for (const dy of [-S, 0, S]) {
-        const grd = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
-        grd.addColorStop(0, `rgba(190,190,205,${a})`);
-        grd.addColorStop(1, 'rgba(190,190,205,0)');
-        g.fillStyle = grd;
-        g.fillRect(x + dx - r, y + dy - r, r * 2, r * 2);
+  // The fog is two layers made on the fly: a thick cloudy base and a see-through layer of wisps
+  // on top. They drift at different speeds and angles, so the pattern never visibly repeats.
+  // You choose the look in the editor; it is published with the map.
+  const FOG_S = 512, WISP_S = 384;
+  const fogFx = { key: '', noiseKey: '', nb: null, nw: null, base: null, wisp: null, out: null, wout: null, ox: 0, oy: 0, wx: 0, wy: 0, t: 0, last: 0, raf: 0 };
+  // Seamless (tiling) cloud noise, values 0..1. freq << (octaves-1) must divide S.
+  function fogNoise(S, freq, octaves, ridged, seed) {
+    let s = (seed * 7919) % 2147483647 || 1;
+    const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+    const out = new Float32Array(S * S), fade = (t) => t * t * (3 - 2 * t);
+    let amp = 1, total = 0;
+    for (let o = 0; o < octaves; o++) {
+      const f = freq << o, cell = S / f, tab = new Float32Array(f * f);
+      for (let i = 0; i < tab.length; i++) tab[i] = rnd();
+      for (let y = 0; y < S; y++) {
+        const gy = y / cell, y0 = Math.floor(gy), ty = fade(gy - y0), r0 = (y0 % f) * f, r1 = ((y0 + 1) % f) * f;
+        for (let x = 0; x < S; x++) {
+          const gx = x / cell, x0 = Math.floor(gx), tx = fade(gx - x0), c0 = x0 % f, c1 = (x0 + 1) % f;
+          const a = tab[r0 + c0], b2 = tab[r0 + c1], c = tab[r1 + c0], d = tab[r1 + c1];
+          const top = a + (b2 - a) * tx;
+          let v = top + (c + (d - c) * tx - top) * ty;
+          if (ridged) v = 1 - Math.abs(v * 2 - 1);
+          out[y * S + x] += v * amp;
+        }
       }
+      total += amp; amp *= 0.5;
     }
-    const img = g.getImageData(0, 0, S, S);
-    return { width: S, height: S, data: new Uint8Array(img.data.buffer) };
+    for (let i = 0; i < out.length; i++) out[i] /= total;
+    return out;
+  }
+  const fogCanvas = (S) => { const c = document.createElement('canvas'); c.width = c.height = S; return c; };
+  const hexRgb = (h) => { const n = parseInt(safeColor(h, FOG_DEFAULT.tint).slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  // Light fog is pale mist; dark fog is nearly black.
+  function fogBaseColor(st) {
+    const mw = (1 - st.darkness) * 0.55, mul = 1 - st.darkness * 0.6;
+    return hexRgb(st.tint).map((v) => Math.round((v + (255 - v) * mw) * mul));
+  }
+  // (Re)build the fog images when the look changes. Returns true if anything changed.
+  function buildFogLook() {
+    const st = data.fogStyle, L = FOG_LOOKS[st.look] || FOG_LOOKS.smoke;
+    const nk = st.look + ':' + st.seed;
+    if (fogFx.noiseKey !== nk) {
+      fogFx.nb = fogNoise(FOG_S, L.base[0], L.base[1], L.base[2], st.seed);
+      fogFx.nw = fogNoise(WISP_S, L.wisp[0], L.wisp[1], L.wisp[2], st.seed * 31 + 5);
+      fogFx.noiseKey = nk; fogFx.key = '';
+    }
+    const key = nk + ':' + st.darkness + ':' + st.tint;
+    if (fogFx.key === key) return false;
+    fogFx.key = key;
+    if (!fogFx.base) { fogFx.base = fogCanvas(FOG_S); fogFx.wisp = fogCanvas(WISP_S); fogFx.out = fogCanvas(FOG_S); fogFx.wout = fogCanvas(WISP_S); }
+    const b = fogBaseColor(st), lo = b.map((v) => v * 0.72), hi = b.map((v) => v + (255 - v) * 0.13), wc = b.map((v) => v + (255 - v) * 0.42);
+    const g = fogFx.base.getContext('2d'), img = g.createImageData(FOG_S, FOG_S), px = img.data;
+    for (let i = 0, n = FOG_S * FOG_S; i < n; i++) {
+      const k = Math.min(1, Math.max(0, 0.5 + (fogFx.nb[i] - 0.5) * L.contrast * 2));
+      px[i * 4] = lo[0] + (hi[0] - lo[0]) * k; px[i * 4 + 1] = lo[1] + (hi[1] - lo[1]) * k; px[i * 4 + 2] = lo[2] + (hi[2] - lo[2]) * k; px[i * 4 + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    const wg = fogFx.wisp.getContext('2d'), wimg = wg.createImageData(WISP_S, WISP_S), wp = wimg.data;
+    for (let i = 0, n = WISP_S * WISP_S; i < n; i++) {
+      let t = Math.min(1, Math.max(0, (fogFx.nw[i] - L.wispLo) / (L.wispHi - L.wispLo)));
+      t = t * t * (3 - 2 * t);
+      wp[i * 4] = wc[0]; wp[i * 4 + 1] = wc[1]; wp[i * 4 + 2] = wc[2]; wp[i * 4 + 3] = t * L.wispAmt * 255;
+    }
+    wg.putImageData(wimg, 0, 0);
+    return true;
+  }
+  // Copy each layer into the map at its current drift offset.
+  function pushFogImages() {
+    if (!map || !fogFx.base) return;
+    const draw = (src, out, x, y) => {
+      const S = out.width, g = out.getContext('2d', { willReadFrequently: true });
+      // Whole pixels only: half-pixel copies leave a faint seam where they meet.
+      const px = ((Math.round(x) % S) + S) % S, py = ((Math.round(y) % S) + S) % S;
+      g.clearRect(0, 0, S, S);
+      g.drawImage(src, px, py); g.drawImage(src, px - S, py); g.drawImage(src, px, py - S); g.drawImage(src, px - S, py - S);
+      return g.getImageData(0, 0, S, S);
+    };
+    const a = draw(fogFx.base, fogFx.out, fogFx.ox, fogFx.oy), w = draw(fogFx.wisp, fogFx.wout, fogFx.wx, fogFx.wy);
+    try {
+      if (map.hasImage('fog-tex')) map.updateImage('fog-tex', a); else map.addImage('fog-tex', a);
+      if (map.hasImage('fog-wisp')) map.updateImage('fog-wisp', w); else map.addImage('fog-wisp', w);
+    } catch (e) { /* the map isn't ready yet; the next frame will try again */ }
+  }
+  function setWispOpacity() {
+    if (!styleReady) return;
+    const st = data.fogStyle, breathe = st.pulse ? 0.65 + 0.35 * Math.sin(fogFx.t * 0.7) : 1;
+    try { map.setPaintProperty('fog-wisp', 'fill-opacity', (editing ? 0.35 : 1) * breathe); } catch (e) { /* busy */ }
+  }
+  const fogMoving = () => styleReady && (data.fogStyle.speed > 0 || data.fogStyle.pulse) && data.fog.some((f) => f.active && f.shape);
+  function startFogAnim() {
+    if (fogFx.raf || !fogMoving()) return;
+    fogFx.last = 0;
+    fogFx.raf = requestAnimationFrame(fogTick);
+  }
+  function fogTick(now) {
+    fogFx.raf = 0;
+    if (!fogMoving()) return;
+    fogFx.raf = requestAnimationFrame(fogTick);
+    if (fogFx.last && now - fogFx.last < 50) return; // about 20 frames a second is plenty for drifting fog
+    const dt = fogFx.last ? Math.min(0.25, (now - fogFx.last) / 1000) : 0;
+    fogFx.last = now; fogFx.t += dt;
+    const st = data.fogStyle;
+    if (st.speed > 0) {
+      const v = st.speed * 5, a = st.dir * Math.PI / 180, a2 = a + 0.5;
+      fogFx.ox += Math.cos(a) * v * dt; fogFx.oy -= Math.sin(a) * v * dt;
+      fogFx.wx += Math.cos(a2) * v * 1.8 * dt; fogFx.wy -= Math.sin(a2) * v * 1.8 * dt;
+      pushFogImages();
+    }
+    if (st.pulse) setWispOpacity();
   }
   const activeFog = () => data.fog.filter((f) => f.active);
   function inRing(ring, x, y) {
@@ -582,14 +693,21 @@
   }
   // Players see thick fog with soft edges; you see it see-through with an outline.
   function applyFogLook() {
+    const st = data.fogStyle, c = 'rgb(' + fogBaseColor(st).join(',') + ')';
     try {
-      map.setPaintProperty('fog-fill', 'fill-opacity', editing ? 0.55 : 0.98);
-      map.setPaintProperty('fog-edge', 'line-opacity', editing ? 0 : 0.9);
-      map.setPaintProperty('fog-haze', 'line-opacity', editing ? 0 : 0.55);
+      map.setPaintProperty('fog-fill', 'fill-opacity', editing ? 0.55 : st.thickness);
+      map.setPaintProperty('fog-edge', 'line-opacity', editing ? 0 : 0.9 * st.thickness);
+      map.setPaintProperty('fog-haze', 'line-opacity', editing ? 0 : 0.55 * st.thickness);
+      map.setPaintProperty('fog-edge', 'line-color', c);
+      map.setPaintProperty('fog-haze', 'line-color', c);
       map.setLayoutProperty('fog-line', 'visibility', editing ? 'visible' : 'none');
+      setWispOpacity();
     } catch (e) {
       map.once('idle', applyFogLook); // the map was busy; try again in a moment
+      return;
     }
+    if (buildFogLook()) pushFogImages();
+    startFogAnim();
   }
 
   function renderAll() {
@@ -2441,7 +2559,7 @@
     popup.remove();
     if (currentView === 'quest') showQuests();
     else if (currentView === 'region') showRegions();
-    else if (currentView === 'fogarea') showFog();
+    else if (currentView === 'fogarea' || currentView === 'foglook') showFog();
     else if (currentView === 'sticker') showStickers();
     else showList();
   }
@@ -2455,6 +2573,7 @@
     else if (currentView === 'monsters' || currentView === 'monster') showMonsters();
     else if (currentView === 'sounds') showSounds();
     else if (currentView === 'stickers' || currentView === 'sticker') showStickers();
+    else if (currentView === 'foglook') showFogLook();
     else if (currentView === 'fog' || currentView === 'fogarea' || currentView === 'brush') showFog();
     else if (currentView === 'settings') showSettings();
     else if (currentView === 'regions' || currentView === 'region') showRegions();
@@ -3015,6 +3134,7 @@
       data.fog.push(f); renderAll(); changed(); showFogForm(f);
     }));
     if (data.fog.some((f) => f.shape)) b.appendChild(btn('Erase fog (reveal explored areas)', 'small list-add', () => startBrush(null, true)));
+    b.appendChild(btn('Fog look & movement…', 'small list-add', showFogLook));
     b.appendChild(el('p', 'tip', 'Paint fog by dragging a circle brush over the map, and erase it as the party explores. Players see a dark cover that hides any pins, quests or region names under it. You see it see-through here.'));
     if (!data.fog.length) { b.appendChild(el('p', 'muted', 'No fog yet.')); return; }
     const ul = el('ul', 'pin-list');
@@ -3028,6 +3148,45 @@
     row.appendChild(btn('Lift all fog', 'small', () => { data.fog.forEach((f) => { f.active = false; }); renderFog(); changed(); showFog(); }));
     row.appendChild(btn('Fog everything again', 'small ghost', () => { data.fog.forEach((f) => { f.active = true; }); renderFog(); changed(); showFog(); }));
     b.appendChild(row);
+  }
+  // How the fog looks and moves, for everyone.
+  function showFogLook() {
+    currentView = 'foglook'; selectedId = null; setTab(null); updateStatus(); popup.remove();
+    const b = body(), st = data.fogStyle;
+    b.appendChild(el('div', 'form-head')).appendChild(btn('← All fog', 'ghost small', showFog));
+    const upd = () => { applyFogLook(); changed(); };
+    const slider = (label, min, max, step, value, fmt, onInput) => {
+      const f = el('div', 'field', label);
+      const row = el('div', 'size-row');
+      const r = el('input');
+      r.type = 'range'; r.min = String(min); r.max = String(max); r.step = String(step); r.value = String(value);
+      const out = el('span', 'size-val', fmt(value));
+      r.oninput = () => { out.textContent = fmt(+r.value); onInput(+r.value); };
+      row.appendChild(r); row.appendChild(out); f.appendChild(row);
+      return f;
+    };
+    b.appendChild(field('Style', selectInput(Object.entries(FOG_LOOKS).map(([k, L]) => [k, L.name]), st.look, (v) => { st.look = v; upd(); })));
+    b.appendChild(slider('Light or dark', 0, 1, 0.05, st.darkness, (v) => (v < 0.35 ? 'Light' : v < 0.7 ? 'Medium' : 'Dark'), (v) => { st.darkness = v; upd(); }));
+    b.appendChild(slider('Thickness (lower lets players faintly see the map underneath)', 0.7, 1, 0.01, st.thickness, (v) => Math.round(v * 100) + '%', (v) => { st.thickness = v; upd(); }));
+    const tf = el('div', 'field', 'Colour');
+    tf.appendChild(colorPicker(el('div', 'swatches'), st.tint, (c) => { st.tint = c; upd(); }, FOG_TINTS));
+    b.appendChild(tf);
+    b.appendChild(slider('Drift speed', 0, 10, 0.5, st.speed, (v) => (v === 0 ? 'Still' : String(v)), (v) => { st.speed = v; upd(); }));
+    b.appendChild(field('Drifts toward', selectInput(FOG_DIRS.map(([d, n]) => [String(d), n]), String(FOG_DIRS.some(([d]) => d === st.dir) ? st.dir : 0), (v) => { st.dir = +v; upd(); })));
+    const pl = el('label', 'check');
+    const pc = el('input');
+    pc.type = 'checkbox'; pc.checked = st.pulse;
+    pc.onchange = () => { st.pulse = pc.checked; upd(); };
+    pl.appendChild(pc);
+    pl.appendChild(document.createTextNode(' Breathing (the wisps slowly thicken and thin)'));
+    b.appendChild(pl);
+    const row = el('div', 'btn-row');
+    row.style.marginTop = '12px';
+    row.appendChild(btn('Shuffle the pattern', 'small', () => { st.seed = 1 + Math.floor(Math.random() * 99998); upd(); }));
+    row.appendChild(btn('Reset to default', 'small ghost', () => { Object.assign(st, FOG_DEFAULT); upd(); showFogLook(); }));
+    b.appendChild(row);
+    b.appendChild(el('p', 'tip', 'You see the fog see-through while editing, but the movement, colour and style are what players get. Press Publish so they see the change.'));
+    b.appendChild(btn('Done', 'primary', showFog));
   }
   function showFogForm(f) {
     currentView = 'fogarea'; selectedId = f.id; setTab(null); updateStatus(); popup.remove();
