@@ -3118,7 +3118,7 @@ window.MAP_DATA = {
       "id": "pmw60mrf0vfto",
       "title": "Clear the Woods",
       "description": "\"Someone or something has been taking scouts and soldiers alike from Nickel's forces. Find out what's causing these disappearances.\"",
-      "status": "active",
+      "status": "done",
       "giver": "Nickel",
       "locationId": "pmw4fyq1snq33",
       "lng": -79.879628,
