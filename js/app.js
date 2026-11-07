@@ -60,6 +60,17 @@
     portal: ['Portal', 'M12 2c4.4 0 7 4.5 7 10s-2.6 10-7 10-7-4.5-7-10 2.6-10 7-10zm0 3c-2.4 0-4 3.1-4 7s1.6 7 4 7 4-3.1 4-7-1.6-7-4-7z']
   };
   const SYMBOL_COLORS = ['#141414', '#ffffff', ...PIN_COLORS];
+  // Sticker library (drawings in images/stickers/). They're drawn in this ink color, which can be swapped.
+  const STICKERS_ON = false; // set to true to turn the Stickers tab on (also upload images/stickers/)
+  const STICKER_INK = '#e6dcc3';
+  const STICKERS = [
+    ['great-old-one', 'The Great Old One'], ['kraken-arms', 'Kraken arms'], ['deep-one', 'Deep one'],
+    ['watching-eye', 'The watching eye'], ['shoggoth', 'Shoggoth'], ['elder-sign', 'Elder sign'],
+    ['sunken-spires', 'Sunken spires'], ['sea-serpent', 'Sea serpent'], ['tentacle-moon', 'Tentacled moon'],
+    ['hand-from-the-deep', 'Hand from the deep']
+  ];
+  const INK_COLORS = [STICKER_INK, '#ffffff', '#9fd8b0', '#7fd1c9', '#e05a5a', '#b48cff', '#e8b04a', '#141414'];
+  const STICKER_ZOOM = 11; // a sticker's size is measured at this zoom; it grows and shrinks with the map
   const clampScale = (v) => { const n = num(v); return n == null ? 1 : Math.min(3, Math.max(0.4, n)); };
   const QUEST_STATUS = { active: 'Active', done: 'Completed', failed: 'Failed' };
   const DEFAULTS = { titleFont: 'Cinzel', bodyFont: 'Spectral', textSize: 'm', color: '#e8b04a' };
@@ -210,8 +221,22 @@
       regions: [],
       locations: [],
       quests: [],
-      fog: []
+      fog: [],
+      stickers: []
     };
+    for (const s of arr(d.stickers)) {
+      if (!s || num(s.lng) == null || num(s.lat) == null) continue;
+      const lib = STICKERS.some(([k]) => k === s.lib) ? s.lib : '';
+      const image = lib ? '' : safeImageSrc(s.image);
+      if (!lib && !image) continue;
+      out.stickers.push({
+        id: str(s.id) || uid(), lib, image, lng: num(s.lng), lat: num(s.lat),
+        size: Math.min(600, Math.max(20, num(s.size) || 140)),
+        rotation: Math.min(180, Math.max(-180, num(s.rotation) || 0)),
+        opacity: Math.min(1, Math.max(0.15, num(s.opacity) == null ? 1 : num(s.opacity))),
+        color: safeColor(s.color, STICKER_INK), flip: !!s.flip
+      });
+    }
     for (const r of arr(d.regions)) {
       if (!r) continue;
       const points = arr(r.points).filter((p) => Array.isArray(p) && num(p[0]) != null && num(p[1]) != null).map((p) => [num(p[0]), num(p[1])]);
@@ -405,7 +430,7 @@
     map.on('mouseup', brushUp); map.on('touchend', brushUp);
     window.addEventListener('mouseup', brushUp);
     map.getContainer().addEventListener('mouseleave', () => { const c = $('#brush-cursor'); if (c) c.style.display = 'none'; });
-    map.on('zoom', fitRegionLabels);
+    map.on('zoom', () => { fitRegionLabels(); fitStickers(); });
     map.on('resize', () => { lockZoom(); fitRegionLabels(); });
     if (document.fonts) document.fonts.addEventListener('loadingdone', fitRegionLabels);
     map.on('mousemove', (e) => {
@@ -424,8 +449,9 @@
     window.campaignMap = { get map() { return map; }, get data() { return data; } }; // handy for debugging
 
     renderAll();
+    startParty();
     const unseen = unseenQuests().length;
-    if (unseen) toast(`📜 ${unseen} new quest${unseen === 1 ? '' : 's'} in your logbook`, 'quest', 9000, () => toggleLog(true, 'quests'));
+    if (unseen) toast(`${unseen} new quest${unseen === 1 ? '' : 's'} in your logbook`, 'quest', 9000, () => toggleLog(true, 'quests'));
     checkHash();
   }
 
@@ -503,6 +529,7 @@
 
   function renderAll() {
     renderFog();
+    renderStickers();
     renderMarkers();
     renderQuestMarkers();
     renderRegions();
@@ -525,7 +552,7 @@
     popup.remove();
     renderAll();
     visibleQuests(fresh).filter((q) => !before.has(q.id)).forEach((q) => {
-      toast('📜 New quest: ' + (q.title || 'Untitled quest') + ' (tap to open)', 'quest', 15000, () => toggleLog(true, 'quests'));
+      toast('New quest: ' + (q.title || 'Untitled quest') + ' (tap to open)', 'quest', 15000, () => toggleLog(true, 'quests'));
     });
   }
 
@@ -553,6 +580,7 @@
     const t = $('#map-title');
     const show = data.showTitle && !!data.title.trim();
     t.hidden = !show;
+    document.body.classList.toggle('has-title', show);
     if (show) {
       loadFont(data.titleFont);
       t.textContent = data.title;
@@ -636,6 +664,62 @@
       m.on('dragend', () => { const p = m.getLngLat(); q.lng = round6(p.lng); q.lat = round6(p.lat); changed(); });
       qmarkers.set(q.id, m);
     });
+  }
+
+  // ===== Stickers (drawn above the fog, so players always see them) =====
+  const smarkers = new Map();
+  const svgCache = new Map();
+  const byStickerId = (id) => data.stickers.find((s) => s.id === id);
+  async function stickerSrc(s) {
+    if (!s.lib) return resolveImage(safeImageSrc(s.image));
+    let txt = svgCache.get(s.lib);
+    if (!txt) {
+      txt = await (await fetch(`images/stickers/${s.lib}.svg`)).text();
+      svgCache.set(s.lib, txt);
+    }
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(txt.split(STICKER_INK).join(safeColor(s.color, STICKER_INK)));
+  }
+  function sizeSticker(s, wrap) {
+    const px = Math.min(3000, s.size * Math.pow(2, map.getZoom() - STICKER_ZOOM));
+    wrap.style.width = wrap.style.height = Math.round(px) + 'px';
+  }
+  function addSticker(s) {
+    const wrap = el('div', 'sticker');
+    wrap.dataset.key = 'sticker:' + s.id;
+    const img = el('img');
+    img.alt = '';
+    img.draggable = false;
+    img.style.opacity = s.opacity;
+    img.style.transform = `rotate(${s.rotation}deg)${s.flip ? ' scaleX(-1)' : ''}`;
+    stickerSrc(s).then((src) => { img.src = src; }).catch(() => {});
+    wrap.appendChild(img);
+    sizeSticker(s, wrap);
+    const m = new maplibregl.Marker({ element: wrap, anchor: 'center', draggable: editing }).setLngLat([s.lng, s.lat]).addTo(map);
+    if (editing) {
+      wrap.addEventListener('click', (e) => { e.stopPropagation(); showStickerForm(s); });
+      m.on('dragend', () => { const p = m.getLngLat(); s.lng = round6(p.lng); s.lat = round6(p.lat); changed(); });
+    }
+    smarkers.set(s.id, { m, wrap, s });
+  }
+  function renderStickers() {
+    for (const { m } of smarkers.values()) m.remove();
+    smarkers.clear();
+    if (!STICKERS_ON) return;
+    data.stickers.forEach(addSticker);
+    markSticker(currentView === 'sticker' ? selectedId : null);
+  }
+  function updateSticker(s) {
+    const old = smarkers.get(s.id);
+    if (old) old.m.remove();
+    smarkers.delete(s.id);
+    addSticker(s);
+    markSticker(s.id);
+  }
+  function fitStickers() {
+    for (const { wrap, s } of smarkers.values()) sizeSticker(s, wrap);
+  }
+  function markSticker(id) {
+    for (const [sid, { wrap }] of smarkers) wrap.classList.toggle('selected', sid === id);
   }
 
   // ===== Regions =====
@@ -898,7 +982,7 @@
       return;
     }
     popup.remove();
-    if (editing && /^(pin|quest|region)$/.test(currentView)) backToList();
+    if (editing && /^(pin|quest|region|sticker)$/.test(currentView)) backToList();
   }
 
   // ===== Settlement page (players) =====
@@ -1111,11 +1195,194 @@
     lb.appendChild(scroll);
   }
 
+  // ===== Live party: who has the map open right now =====
+  // Uses a free public message relay (no sign-up). Each device keeps its own name and color;
+  // the DM (in #edit) can rename anyone, and the change reaches that player's device.
+  const RELAY_URL = 'wss://broker.hivemq.com:8884/mqtt';
+  const RELAY_LIB = 'https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js';
+  const ME_KEY = 'campaign-map.me:' + SITE_KEY, PARTY_OPEN_KEY = 'campaign-map.partyOpen';
+  const ONLINE_MS = 120000;
+  const roomHash = (() => { let h = 2166136261; for (const c of location.host + location.pathname.replace(/index\.html$/, '')) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); })();
+  const ROOM = 'campaignmap-v1/' + roomHash;
+  let relay = null, me = null, relayState = 'connecting', partyEdit = null;
+  const party = new Map();
+  const cleanName = (n) => String(n || '').replace(/\s+/g, ' ').trim().slice(0, 24);
+  const initialOf = (n) => (cleanName(n).match(/[\p{L}\p{N}]/u) || ['?'])[0].toUpperCase();
+  const inkOn = (hex) => { const v = parseInt(hex.slice(1), 16); const l = (0.299 * (v >> 16) + 0.587 * ((v >> 8) & 255) + 0.114 * (v & 255)) / 255; return l > 0.6 ? '#141414' : '#ffffff'; };
+  function loadMe() {
+    const m = lsGet(ME_KEY, null);
+    if (m && typeof m.id === 'string' && m.id) return { id: m.id, name: cleanName(m.name), color: safeColor(m.color, PIN_COLORS[0]) };
+    const n = { id: uid(), name: '', color: PIN_COLORS[Math.floor(Math.random() * PIN_COLORS.length)] };
+    lsSet(ME_KEY, n);
+    return n;
+  }
+  function startParty() {
+    me = loadMe();
+    renderParty();
+    if (!me.name) openPartyEditor(me);
+    const s = document.createElement('script');
+    s.src = RELAY_LIB;
+    s.onload = connectRelay;
+    s.onerror = () => { relayState = 'offline'; renderParty(); };
+    document.head.appendChild(s);
+    setInterval(renderParty, 20000);
+  }
+  function connectRelay() {
+    if (!window.mqtt) { relayState = 'offline'; renderParty(); return; }
+    const myTopic = `${ROOM}/p/${me.id}`;
+    try {
+      relay = mqtt.connect(RELAY_URL, {
+        clientId: 'cm_' + me.id + '_' + Math.random().toString(36).slice(2, 7),
+        clean: true, keepalive: 30, reconnectPeriod: 5000, connectTimeout: 12000,
+        will: { topic: myTopic, payload: '', retain: true, qos: 0 }
+      });
+    } catch (e) { relayState = 'offline'; renderParty(); return; }
+    relay.on('connect', () => {
+      relayState = 'live';
+      relay.subscribe([`${ROOM}/p/+`, `${ROOM}/rename/${me.id}`]);
+      announce();
+      renderParty();
+    });
+    relay.on('message', onRelayMessage);
+    relay.on('offline', () => { relayState = 'offline'; renderParty(); });
+    relay.on('reconnect', () => { relayState = 'connecting'; renderParty(); });
+    setInterval(announce, 30000);
+    window.addEventListener('pagehide', () => { try { relay.publish(myTopic, '', { retain: true }); relay.end(true); } catch (e) { /* closing */ } });
+  }
+  function announce() {
+    if (!relay || !relay.connected) return;
+    relay.publish(`${ROOM}/p/${me.id}`, JSON.stringify({ id: me.id, name: me.name, color: me.color, dm: editing, ts: Date.now() }), { retain: true });
+  }
+  function onRelayMessage(topic, payload) {
+    const txt = payload.toString();
+    if (topic === `${ROOM}/rename/${me.id}`) {
+      if (!txt) return;
+      try {
+        const r = JSON.parse(txt);
+        const before = me.name;
+        if (typeof r.name === 'string' && cleanName(r.name)) me.name = cleanName(r.name);
+        if (r.color) me.color = safeColor(r.color, me.color);
+        lsSet(ME_KEY, me);
+        relay.publish(topic, '', { retain: true }); // used it, so clear it
+        announce();
+        renderParty();
+        if (me.name !== before) toast('Your DM changed your name to ' + me.name + '.', 'info', 6000);
+      } catch (e) { /* bad message */ }
+      return;
+    }
+    const id = topic.split('/').pop();
+    if (id === me.id) return;
+    if (!txt) { party.delete(id); renderParty(); return; }
+    try {
+      const p = JSON.parse(txt);
+      if (!p || p.id !== id) return;
+      party.set(id, { id, name: cleanName(p.name), color: safeColor(p.color, PIN_COLORS[0]), dm: !!p.dm, ts: num(p.ts) || 0 });
+      renderParty();
+    } catch (e) { /* bad message */ }
+  }
+  function avatar(p, size) {
+    const a = el('span', 'avatar', initialOf(p.name));
+    a.style.background = p.color;
+    a.style.color = inkOn(p.color);
+    if (size) { a.style.width = a.style.height = size + 'px'; a.style.fontSize = Math.round(size * 0.45) + 'px'; }
+    return a;
+  }
+  function renderParty() {
+    const box = $('#party');
+    if (!box || !me) return;
+    const now = Date.now();
+    const others = [...party.values()].filter((p) => now - p.ts < ONLINE_MS)
+      .sort((a, b) => (b.dm - a.dm) || a.name.localeCompare(b.name));
+    const all = [{ ...me, dm: editing, you: true }, ...others];
+    const open = lsGet(PARTY_OPEN_KEY, true);
+    box.innerHTML = '';
+    box.classList.toggle('collapsed', !open);
+    const head = el('button', 'party-head');
+    head.type = 'button';
+    head.setAttribute('aria-expanded', String(open));
+    const dot = el('span', 'party-dot ' + relayState);
+    dot.title = relayState === 'live' ? 'Live' : relayState === 'offline' ? 'Offline: can’t reach the live service' : 'Connecting…';
+    head.appendChild(dot);
+    if (open) head.appendChild(el('span', 'party-title', `Party · ${all.length} online`));
+    else { const stack = el('span', 'party-stack'); all.slice(0, 6).forEach((p) => stack.appendChild(avatar(p, 26))); if (all.length > 6) stack.appendChild(el('span', 'party-more', '+' + (all.length - 6))); head.appendChild(stack); }
+    head.appendChild(el('span', 'party-chev', open ? '▴' : '▾'));
+    head.onclick = () => { lsSet(PARTY_OPEN_KEY, !open); partyEdit = null; renderParty(); };
+    box.appendChild(head);
+    if (!open) return;
+    const list = el('div', 'party-list');
+    all.forEach((p) => {
+      const row = el('button', 'party-row' + (p.you ? ' you' : ''));
+      row.type = 'button';
+      row.appendChild(avatar(p));
+      row.appendChild(el('span', 'party-name' + (p.name ? '' : ' empty'), p.name || (p.you ? 'Set your name' : 'Unnamed')));
+      if (p.dm) row.appendChild(el('span', 'party-tag dm', 'DM'));
+      if (p.you) row.appendChild(el('span', 'party-tag', 'you'));
+      const canEdit = p.you || editing;
+      row.disabled = !canEdit;
+      if (canEdit) row.title = p.you ? 'Change your name and color' : 'Change this player’s name and color';
+      row.onclick = () => openPartyEditor(p.you ? me : party.get(p.id));
+      list.appendChild(row);
+      if (partyEdit && partyEdit.id === p.id) list.appendChild(partyEditorForm(p.you ? me : party.get(p.id)));
+    });
+    if (relayState === 'offline') list.appendChild(el('div', 'party-note', 'Can’t reach the live service right now, so only you are shown. It keeps trying.'));
+    box.appendChild(list);
+  }
+  function openPartyEditor(p) {
+    if (!p) return;
+    lsSet(PARTY_OPEN_KEY, true);
+    partyEdit = partyEdit && partyEdit.id === p.id ? null : { id: p.id };
+    renderParty();
+    const inp = $('#party .party-edit input');
+    if (inp) { inp.focus(); inp.select(); }
+  }
+  function partyEditorForm(p) {
+    const f = el('form', 'party-edit');
+    const isMe = p.id === me.id;
+    let color = p.color;
+    const inp = el('input');
+    inp.maxLength = 24;
+    inp.placeholder = isMe ? 'Your name' : 'Player name';
+    inp.value = p.name;
+    inp.autocomplete = 'off';
+    f.appendChild(inp);
+    const sw = el('div', 'party-swatches');
+    PIN_COLORS.forEach((c) => {
+      const b = el('button', 'sw' + (c === color ? ' on' : ''));
+      b.type = 'button'; b.style.background = c; b.title = c;
+      b.onclick = () => { color = c; sw.querySelectorAll('.sw').forEach((x) => x.classList.toggle('on', x === b)); };
+      sw.appendChild(b);
+    });
+    f.appendChild(sw);
+    const row = el('div', 'party-edit-btns');
+    row.appendChild(btn('Cancel', 'small ghost', () => { partyEdit = null; renderParty(); }));
+    const save = btn('Save', 'small primary');
+    save.type = 'submit';
+    row.appendChild(save);
+    f.appendChild(row);
+    f.onsubmit = (e) => {
+      e.preventDefault();
+      const name = cleanName(inp.value);
+      if (!name) { inp.focus(); toast('Enter a name first.', 'warn'); return; }
+      if (isMe) {
+        me.name = name; me.color = color; lsSet(ME_KEY, me); announce();
+      } else if (editing) {
+        // Ask that player's device to change; it keeps the change on their device.
+        if (relay && relay.connected) relay.publish(`${ROOM}/rename/${p.id}`, JSON.stringify({ name, color }), { retain: true });
+        const cur = party.get(p.id);
+        if (cur) { cur.name = name; cur.color = color; }
+        toast(`Renamed to ${name}. It updates on their screen in a moment.`, 'ok');
+      }
+      partyEdit = null;
+      renderParty();
+    };
+    return f;
+  }
+
   // ===== Editor =====
   const PANEL_HTML = `
     <div class="ed-head"><div class="ed-title">Map editor</div><div class="ed-status" id="ed-status"></div></div>
     <div class="ed-actions"><button type="button" class="btn accent" id="ed-publish">Publish</button></div>
-    <div class="ed-tabs"><button type="button" data-tab="list">Pins</button><button type="button" data-tab="regions">Regions</button><button type="button" data-tab="quests">Quests</button><button type="button" data-tab="fog">Fog</button><button type="button" data-tab="settings">Settings</button></div>
+    <div class="ed-tabs"><button type="button" data-tab="list">Pins</button><button type="button" data-tab="regions">Regions</button><button type="button" data-tab="quests">Quests</button><button type="button" data-tab="fog">Fog</button><button type="button" data-tab="stickers">Stickers</button><button type="button" data-tab="settings">Settings</button></div>
     <div class="ed-body" id="ed-body"></div>
     <div class="ed-foot"><span class="muted small">Only you can publish changes.</span>
       <button type="button" class="btn ghost small" id="ed-exit">Exit editor</button></div>`;
@@ -1164,6 +1431,7 @@
     document.body.appendChild(panel);
     $('#ed-publish').onclick = publish;
     $('#ed-exit').onclick = () => { location.hash = ''; };
+    if (!STICKERS_ON) panel.querySelector('[data-tab="stickers"]').remove();
     panel.querySelectorAll('[data-tab]').forEach((b) => { b.onclick = () => { cancelMode(true); showTab(b.dataset.tab); }; });
     map.resize();
 
@@ -1187,6 +1455,7 @@
     popup.remove();
     renderAll();
     showList();
+    announce(); renderParty();
   }
 
   function exitEdit() {
@@ -1200,6 +1469,7 @@
     popup.remove();
     renderAll();
     map.resize();
+    announce(); renderParty();
     if (hadChanges) toast('Your unpublished changes are saved on this device. Open #edit again to finish and publish.', 'info', 7000);
   }
 
@@ -1231,6 +1501,7 @@
     if (tab === 'regions') showRegions();
     else if (tab === 'quests') showQuests();
     else if (tab === 'fog') showFog();
+    else if (tab === 'stickers') showStickers();
     else if (tab === 'settings') showSettings();
     else showList();
   }
@@ -1239,6 +1510,7 @@
     if (currentView === 'quest') showQuests();
     else if (currentView === 'region') showRegions();
     else if (currentView === 'fogarea') showFog();
+    else if (currentView === 'sticker') showStickers();
     else showList();
   }
   function refreshView() {
@@ -1246,6 +1518,8 @@
     else if (currentView === 'quest' && byQuest(selectedId)) showQuestForm(byQuest(selectedId));
     else if (currentView === 'region' && byRegion(selectedId)) showRegionForm(byRegion(selectedId));
     else if (currentView === 'fogarea' && byFog(selectedId)) showFogForm(byFog(selectedId));
+    else if (currentView === 'sticker' && byStickerId(selectedId)) showStickerForm(byStickerId(selectedId));
+    else if (currentView === 'stickers' || currentView === 'sticker') showStickers();
     else if (currentView === 'fog' || currentView === 'fogarea' || currentView === 'brush') showFog();
     else if (currentView === 'settings') showSettings();
     else if (currentView === 'regions' || currentView === 'region') showRegions();
@@ -1836,6 +2110,97 @@
     b.appendChild(foot);
   }
 
+  // --- Stickers ---
+  function newSticker(lib, image) {
+    const c = map.getCenter();
+    const s = { id: uid(), lib: lib || '', image: image || '', lng: round6(c.lng), lat: round6(c.lat), size: Math.round(140 * Math.pow(2, STICKER_ZOOM - map.getZoom()) * 1.4), rotation: 0, opacity: 1, color: STICKER_INK, flip: false };
+    s.size = Math.min(600, Math.max(20, s.size));
+    data.stickers.push(s);
+    addSticker(s);
+    changed();
+    showStickerForm(s);
+  }
+  function showStickers() {
+    currentView = 'stickers'; selectedId = null; setTab('stickers'); updateStatus(); popup.remove(); markSticker(null);
+    const b = body();
+    b.appendChild(el('p', 'tip', 'Click a sticker to drop it in the middle of the map, then drag it where you want. Stickers show above the fog, so players can always see them.'));
+    const lib = el('div', 'sticker-lib');
+    STICKERS.forEach(([k, label]) => {
+      const t = el('button', 'sticker-pick');
+      t.type = 'button';
+      t.title = label;
+      const im = el('img');
+      im.src = `images/stickers/${k}.svg`;
+      im.alt = label;
+      t.appendChild(im);
+      t.appendChild(el('span', null, label));
+      t.onclick = () => newSticker(k);
+      lib.appendChild(t);
+    });
+    b.appendChild(lib);
+    const up = el('label', 'btn small', 'Upload your own image…');
+    up.style.margin = '10px 0 0'; up.style.color = 'var(--text)';
+    const file = el('input');
+    file.type = 'file'; file.accept = 'image/*'; file.hidden = true;
+    file.onchange = async () => {
+      const f = file.files[0];
+      file.value = '';
+      if (!f) return;
+      try { newSticker('', await fileToDataUrl(f)); } catch (e) { toast('That file couldn’t be used as an image.', 'error'); }
+    };
+    up.appendChild(file);
+    b.appendChild(up);
+    if (data.stickers.length) {
+      b.appendChild(el('div', 'sub-h', `On the map (${data.stickers.length})`));
+      const ul = el('ul', 'pin-list');
+      data.stickers.forEach((s) => {
+        const name = s.lib ? (STICKERS.find(([k]) => k === s.lib) || [])[1] : 'Your image';
+        ul.appendChild(listButton(s.color, name, null, () => { map.easeTo({ center: [s.lng, s.lat], duration: 500 }); showStickerForm(s); }));
+      });
+      b.appendChild(ul);
+    }
+  }
+  function showStickerForm(s) {
+    currentView = 'sticker'; selectedId = s.id; setTab(null); updateStatus(); popup.remove(); markSticker(s.id);
+    const b = body();
+    const redraw = () => { updateSticker(s); changed(); };
+    b.appendChild(el('div', 'form-head')).appendChild(btn('← All stickers', 'ghost small', showStickers));
+    b.appendChild(el('p', 'tip', 'Drag the sticker on the map to move it.'));
+    const slider = (label, min, max, step, value, fmt, onInput) => {
+      const f = el('div', 'field', label);
+      const row = el('div', 'size-row');
+      const r = el('input');
+      r.type = 'range'; r.min = String(min); r.max = String(max); r.step = String(step); r.value = String(value);
+      const out = el('span', 'size-val', fmt(value));
+      r.oninput = () => { out.textContent = fmt(+r.value); onInput(+r.value); };
+      row.appendChild(r); row.appendChild(out); f.appendChild(row);
+      return f;
+    };
+    b.appendChild(slider('Size', 20, 600, 5, s.size, (v) => Math.round(v) + '', (v) => { s.size = v; const e = smarkers.get(s.id); if (e) sizeSticker(s, e.wrap); changed(); }));
+    b.appendChild(slider('Rotation', -180, 180, 5, s.rotation, (v) => Math.round(v) + '°', (v) => { s.rotation = v; redraw(); }));
+    b.appendChild(slider('Opacity', 0.15, 1, 0.05, s.opacity, (v) => Math.round(v * 100) + '%', (v) => { s.opacity = v; redraw(); }));
+    if (s.lib) b.appendChild(colorField('Ink color', s.color, (c) => { s.color = c; redraw(); }));
+    if (s.lib) colorPicker(b.lastChild.querySelector('.swatches'), s.color, (c) => { s.color = c; redraw(); }, INK_COLORS);
+    const fl = el('label', 'check');
+    const fc = el('input');
+    fc.type = 'checkbox'; fc.checked = s.flip;
+    fc.onchange = () => { s.flip = fc.checked; redraw(); };
+    fl.appendChild(fc); fl.appendChild(document.createTextNode(' Flip left to right'));
+    b.appendChild(fl);
+    const foot = el('div', 'form-foot');
+    foot.appendChild(btn('Delete sticker', 'danger', () => {
+      data.stickers = data.stickers.filter((x) => x !== s);
+      const e = smarkers.get(s.id); if (e) e.m.remove(); smarkers.delete(s.id);
+      changed(); showStickers();
+    }));
+    foot.appendChild(btn('Duplicate', 'small', () => {
+      const c = Object.assign(clone(s), { id: uid(), lng: round6(s.lng + 0.01), lat: round6(s.lat - 0.006) });
+      data.stickers.push(c); addSticker(c); changed(); showStickerForm(c);
+    }));
+    foot.appendChild(btn('Done', 'primary', showStickers));
+    b.appendChild(foot);
+  }
+
   // --- Fog brush: drag a circle over the map to paint or erase fog ---
   let brushSize = 45; // radius in screen pixels
   function startBrush(fogId, erase) {
@@ -1949,7 +2314,8 @@
     } catch (e) {
       toast('That brush stroke didn’t work: ' + e.message, 'warn');
     } finally {
-      if (mode === m) { map.getSource('draft').setData({ type: 'FeatureCollection', features: [] }); }
+      const src = styleReady && map.getSource('draft');
+      if (mode === m && src) src.setData({ type: 'FeatureCollection', features: [] });
     }
   }
 
