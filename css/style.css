@@ -459,4 +459,13 @@ body.editing .qmarker { cursor: grab; }
 .ed-body select.sound-catsel { font-size: 12px; padding: 4px 6px; width: auto; flex: 1 1 120px; min-width: 110px; margin: 0; }/* Sound control: speaker button folds it away */
 .sound-icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--text); cursor: pointer; }
 .sound-icon:hover { background: #26262c; }
-#sound-ctl.collapsed { padding: 4px; }
+#sound-ctl.collapsed { padding: 4px; }/* DM travel ruler */
+body.measuring .maplibregl-canvas { cursor: crosshair; }
+.ruler-seg { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.ruler-seg .btn.on, .ruler-seg button.on { background: var(--accent, #e8b04a); color: #141414; border-color: transparent; }
+.ruler-readout { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 4px 0 12px; background: rgba(255, 255, 255, .03); }
+.ruler-readout .muted { margin: 0; }
+.ruler-time { font: 700 20px var(--ui); color: var(--text); }
+.ruler-sub { font-size: 12px; color: #9a958b; margin-top: 2px; }
+.ruler-notes { margin: 10px 0 6px; padding-left: 18px; font-size: 12.5px; color: var(--text); display: grid; gap: 4px; }
+.ruler-label { padding: 2px 7px; border-radius: 6px; background: rgba(16, 16, 19, .92); border: 1px solid #e8b04a; color: #f3e6c8; font: 700 11px var(--ui); white-space: nowrap; pointer-events: none; }

@@ -91,6 +91,14 @@
   const fontInfo = (name) => FONTS.find((f) => f.name === name);
   // Sound categories in the DM's sound board ('' = not sorted yet).
   const SOUND_CATS = [['music', 'Background Music'], ['ambience', 'Ambience'], ['physical', 'Physical Effects'], ['monsters', 'Monsters'], ['interactive', 'Interactive'], ['', 'Unsorted']];
+  // Travel per day for a party of 4, in travel miles: [average, brisk, non-stop].
+  const TRAVEL = {
+    foot: { name: 'On foot', miles: [12, 16, 22] },
+    car: { name: 'By car', miles: [30, 40, 55] },
+    boat: { name: 'By boat', miles: [20, 30, 40] }
+  };
+  const PACES = [['Average', 8], ['Brisk', 10], ['Non-stop', 14]]; // [name, hours on the move]
+  const TRAVEL_SCALE_DEFAULT = 4; // crossing the map on foot takes about 17 days
   // Fog styles. base/wisp: [noise frequency, layers of detail, ridged (streaky)].
   const FOG_LOOKS = {
     smoke: { name: 'Smoke', base: [4, 5, false], contrast: 1.0, wisp: [3, 5, false], wispLo: 0.5, wispHi: 0.85, wispAmt: 0.55 },
@@ -344,6 +352,8 @@
       pulse: fs.pulse == null ? FOG_DEFAULT.pulse : !!fs.pulse,
       seed: Math.round(rng(fs.seed, 1, 99999, FOG_DEFAULT.seed))
     };
+    // Travel: how many miles of in-game travel one real mile on the map counts as.
+    out.travel = { scale: rng(d.travel && d.travel.scale, 1, 20, TRAVEL_SCALE_DEFAULT) };
     return out;
   }
   // A region's coast-traced outline: [polygon[ring[[lng,lat]...]]], or null.
@@ -430,6 +440,10 @@
       { id: 'regions-line', type: 'line', source: 'regions', paint: { 'line-color': ['get', 'color'], 'line-width': 1.8, 'line-opacity': 0.85, 'line-dasharray': [3, 2] } },
       { id: 'draft-fill', type: 'fill', source: 'draft', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': '#e8b04a', 'fill-opacity': 0.14 } },
       { id: 'draft-line', type: 'line', source: 'draft', filter: ['==', ['geometry-type'], 'LineString'], paint: { 'line-color': '#e8b04a', 'line-width': 2 } },
+      { id: 'ruler-line', type: 'line', source: 'ruler', filter: ['==', ['geometry-type'], 'LineString'], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#e8b04a', 'line-width': 2.5, 'line-dasharray': [2, 1.5] } },
+      { id: 'ruler-ticks', type: 'circle', source: 'ruler', filter: ['==', ['get', 'k'], 'block'], paint: { 'circle-radius': 3, 'circle-color': '#141414', 'circle-stroke-color': '#e8b04a', 'circle-stroke-width': 1.5 } },
+      { id: 'ruler-days', type: 'circle', source: 'ruler', filter: ['==', ['get', 'k'], 'day'], paint: { 'circle-radius': 6, 'circle-color': '#e8b04a', 'circle-stroke-color': '#141414', 'circle-stroke-width': 2 } },
+      { id: 'ruler-pts', type: 'circle', source: 'ruler', filter: ['==', ['get', 'k'], 'pt'], paint: { 'circle-radius': 4.5, 'circle-color': '#fff', 'circle-stroke-color': '#141414', 'circle-stroke-width': 1.5 } },
       { id: 'draft-pts', type: 'circle', source: 'draft', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 5, 'circle-color': '#e8b04a', 'circle-stroke-color': '#000', 'circle-stroke-width': 1.5 } }
     );
     // Start with only fog showing (see init): streets are switched on once the fog is in place.
@@ -442,7 +456,7 @@
     const rl = layers.findIndex((l) => l.id === 'regions-line'), fe = layers.findIndex((l) => l.id === 'fog-haze');
     layers.splice(fe, 0, layers.splice(rl, 1)[0]);
     return { version: 8, sources: { base: source, regions: { type: 'geojson', data: empty }, /* Fog tiles are only cut up to a middling zoom and simply enlarged past it, so zooming in fast never
-    // waits on new fog tiles (which used to leave black squares for a moment). */ fog: { type: 'geojson', data: fogData.fog, maxzoom: 13 }, 'fog-soft': { type: 'geojson', data: fogData.soft, tolerance: 5, buffer: 256, maxzoom: 15 }, draft: { type: 'geojson', data: empty } }, layers };
+    // waits on new fog tiles (which used to leave black squares for a moment). */ fog: { type: 'geojson', data: fogData.fog, maxzoom: 13 }, 'fog-soft': { type: 'geojson', data: fogData.soft, tolerance: 5, buffer: 256, maxzoom: 15 }, draft: { type: 'geojson', data: empty }, ruler: { type: 'geojson', data: empty } }, layers };
   }
 
   // ===== App state =====
@@ -508,6 +522,7 @@
     window.addEventListener('resize', fitSize);
     map.on('click', onMapClick);
     map.on('dblclick', (e) => { if (mode && (mode.type === 'region' || mode.type === 'brush')) { e.preventDefault(); if (mode.type === 'region') finishRegion(); } });
+    map.on('mousemove', rulerHover);
     map.on('mousedown', brushDown); map.on('touchstart', brushDown);
     map.on('mousemove', brushMove); map.on('touchmove', brushMove);
     map.on('mouseup', brushUp); map.on('touchend', brushUp);
@@ -854,6 +869,7 @@
       if (e.key === 'Backspace') { e.preventDefault(); mode.points.pop(); updateDraft(); showDrawing(); return; }
     }
     if (e.key !== 'Escape') return;
+    if (ruler.active && ruler.points.length && !typing) { ruler.points = []; drawRuler(); showRuler(); return; }
     if (!$('#lightbox').hidden) $('#lightbox').hidden = true;
     else if (mode) cancelMode();
     else if (popup && popup.isOpen()) popup.remove();
@@ -1277,6 +1293,7 @@
   function onMapClick(e) {
     const t = e.originalEvent && e.originalEvent.target;
     if (t && t.closest && (t.closest('.pin') || t.closest('.qmarker') || t.closest('.maplibregl-popup'))) return;
+    if (editing && ruler.active) { rulerClick(e.lngLat); return; }
     if (editing && mode) { handleModeClick(e.lngLat); return; }
     if (fogged(e.lngLat.lng, e.lngLat.lat)) { popup.remove(); return; }
     const hit = styleReady && map.queryRenderedFeatures(e.point, { layers: ['regions-fill'] })[0];
@@ -2659,7 +2676,7 @@
   const PANEL_HTML = `
     <div class="ed-head"><div class="ed-title">Map editor</div><div class="ed-status" id="ed-status"></div></div>
     <div class="ed-actions"><button type="button" class="btn accent" id="ed-publish">Publish</button></div>
-    <div class="ed-tabs"><button type="button" data-tab="list">Pins</button><button type="button" data-tab="regions">Regions</button><button type="button" data-tab="quests">Quests</button><button type="button" data-tab="fog">Fog</button><button type="button" data-tab="stickers">Stickers</button><button type="button" data-tab="characters">Characters</button><button type="button" data-tab="monsters">Monsters</button><button type="button" data-tab="sounds">Sounds</button><button type="button" data-tab="settings">Settings</button></div>
+    <div class="ed-tabs"><button type="button" data-tab="list">Pins</button><button type="button" data-tab="regions">Regions</button><button type="button" data-tab="quests">Quests</button><button type="button" data-tab="fog">Fog</button><button type="button" data-tab="stickers">Stickers</button><button type="button" data-tab="ruler">Ruler</button><button type="button" data-tab="characters">Characters</button><button type="button" data-tab="monsters">Monsters</button><button type="button" data-tab="sounds">Sounds</button><button type="button" data-tab="settings">Settings</button></div>
     <div class="ed-body" id="ed-body"></div>
     <div class="ed-foot"><span class="muted small">Only you can publish changes.</span>
       <button type="button" class="btn ghost small" id="ed-exit">Exit editor</button></div>`;
@@ -2739,6 +2756,7 @@
   function exitEdit() {
     const hadChanges = isDirty();
     cancelMode(true);
+    stopRuler();
     editing = false;
     if (panel) panel.remove();
     panel = null;
@@ -2770,6 +2788,7 @@
     if (panel) panel.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === name));
   }
   function body() {
+    if (currentView !== 'ruler' && ruler.active) stopRuler();
     const b = $('#ed-body');
     b.innerHTML = '';
     b.scrollTop = 0;
@@ -2780,6 +2799,7 @@
     else if (tab === 'quests') showQuests();
     else if (tab === 'fog') showFog();
     else if (tab === 'stickers') showStickers();
+    else if (tab === 'ruler') showRuler();
     else if (tab === 'characters') showCharacters();
     else if (tab === 'monsters') showMonsters();
     else if (tab === 'sounds') showSounds();
@@ -2804,6 +2824,7 @@
     else if (currentView === 'monsters' || currentView === 'monster') showMonsters();
     else if (currentView === 'sounds') showSounds();
     else if (currentView === 'characters') showCharacters(selectedId);
+    else if (currentView === 'ruler') showRuler();
     else if (currentView === 'stickers' || currentView === 'sticker') showStickers();
     else if (currentView === 'foglook') showFogLook();
     else if (currentView === 'fog' || currentView === 'fogarea' || currentView === 'brush') showFog();
@@ -3582,6 +3603,159 @@
     };
     list('Passives', 'passives', false);
     list('Actives (attacks can carry dice the player loads into the roller)', 'actives', true);
+  }
+
+  // --- Ruler: measure a route and see how long the party takes ---
+  const ruler = { active: false, points: [], hover: null, mode: 'foot', pace: 0, labels: [] };
+  const RULER_PREF = 'campaign-map.ruler';
+  Object.assign(ruler, (() => { const p = lsGet(RULER_PREF, {}) || {}; return { mode: TRAVEL[p.mode] ? p.mode : 'foot', pace: [0, 1, 2].includes(p.pace) ? p.pace : 0 }; })());
+  const realMiles = (a, b) => {
+    const R = 3958.8, r = Math.PI / 180, dLat = (b[1] - a[1]) * r, dLng = (b[0] - a[0]) * r;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * r) * Math.cos(b[1] * r) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  };
+  const routeMiles = (pts) => pts.slice(1).reduce((s, p, i) => s + realMiles(pts[i], p), 0);
+  const fmtMi = (m) => (m < 10 ? m.toFixed(1) : String(Math.round(m)));
+  function fmtDuration(hours, dayHours) {
+    const days = Math.floor(hours / dayHours + 1e-9), rest = hours - days * dayHours;
+    const h = Math.round(rest * 2) / 2;
+    const parts = [];
+    if (days) parts.push(days + (days === 1 ? ' day' : ' days'));
+    if (h || !days) parts.push((h || '<1') + (h === 1 ? ' hour' : ' hours'));
+    return parts.join(' and ');
+  }
+  // How long a route takes: travel hours, with each day being `dayHours` of moving.
+  function routeTime(real, modeKey, pace) {
+    const scale = data.travel.scale, travelMi = real * scale;
+    const perDay = TRAVEL[modeKey].miles[pace], dayHours = PACES[pace][1], perHour = perDay / dayHours;
+    const hours = travelMi / perHour;
+    return { travelMi, perDay, dayHours, perHour, hours, days: hours / dayHours };
+  }
+  function startRuler() {
+    ruler.active = true;
+    if (map) map.doubleClickZoom.disable();
+    document.body.classList.add('measuring');
+    drawRuler();
+  }
+  function stopRuler() {
+    if (!ruler.active) return;
+    ruler.active = false; ruler.points = []; ruler.hover = null;
+    if (map) map.doubleClickZoom.enable();
+    document.body.classList.remove('measuring');
+    drawRuler();
+  }
+  function rulerClick(ll) {
+    const p = [round6(ll.lng), round6(ll.lat)], last = ruler.points[ruler.points.length - 1];
+    if (last) { const a = map.project(last), b = map.project(p); if (Math.hypot(a.x - b.x, a.y - b.y) < 4) return; }
+    ruler.points.push(p);
+    drawRuler();
+    showRuler();
+  }
+  // The route follows the mouse to preview the next leg (redrawn at most once per frame).
+  let rulerQueued = false;
+  function rulerHover(e) {
+    if (!ruler.active || !ruler.points.length) return;
+    ruler.hover = [e.lngLat.lng, e.lngLat.lat];
+    if (rulerQueued) return;
+    rulerQueued = true;
+    requestAnimationFrame(() => { rulerQueued = false; if (!ruler.active) return; drawRuler(); updateRulerReadout(); });
+  }
+  // Draw the route, a dot every 4 hours of travel and a big dot (with a label) at the end of each day.
+  function drawRuler() {
+    if (!styleReady || !map.getSource('ruler')) return;
+    const labelAt = []; // [lngLat, day number]
+    const pts = ruler.active ? ruler.points.concat(ruler.hover && ruler.points.length ? [ruler.hover] : []) : [];
+    const feats = ruler.points.map((p) => ({ type: 'Feature', properties: { k: 'pt' }, geometry: { type: 'Point', coordinates: p } }));
+    if (pts.length >= 2) {
+      feats.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: pts } });
+      const t = routeTime(1, ruler.mode, ruler.pace);
+      const blockReal = (t.perHour * 4) / data.travel.scale, dayReal = t.perDay / data.travel.scale;
+      const step = blockReal; // marks every 4 hours; days fall on some of them, or between
+      const marks = [];
+      for (let d = step; marks.length < 400; d += step) marks.push({ d, k: 'block' });
+      for (let d = dayReal, n = 1; n <= 120; d += dayReal, n++) marks.push({ d, k: 'day', n });
+      const total = routeMiles(pts);
+      marks.filter((m) => m.d < total - 1e-6).sort((a, b) => a.d - b.d).forEach((m) => {
+        let acc = 0;
+        for (let i = 1; i < pts.length; i++) {
+          const seg = realMiles(pts[i - 1], pts[i]);
+          if (acc + seg >= m.d) {
+            const f = seg ? (m.d - acc) / seg : 0, c = [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * f, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * f];
+            if (m.k === 'block' && marks.some((o) => o.k === 'day' && Math.abs(o.d - m.d) < blockReal * 0.15)) return;
+            feats.push({ type: 'Feature', properties: { k: m.k }, geometry: { type: 'Point', coordinates: c } });
+            if (m.k === 'day' && labelAt.length < 60) labelAt.push([c, m.n]);
+            return;
+          }
+          acc += seg;
+        }
+      });
+    }
+    map.getSource('ruler').setData({ type: 'FeatureCollection', features: feats });
+    // "Day N" tags: reuse the ones already on the map so the preview doesn't flicker.
+    labelAt.forEach(([c, n], i) => {
+      let m = ruler.labels[i];
+      if (!m) { m = new maplibregl.Marker({ element: el('div', 'ruler-label'), anchor: 'bottom', offset: [0, -9] }).setLngLat(c).addTo(map); ruler.labels.push(m); }
+      m.setLngLat(c);
+      m.getElement().textContent = 'Day ' + n;
+    });
+    ruler.labels.splice(labelAt.length).forEach((m) => m.remove());
+  }
+  function updateRulerReadout() {
+    const box = $('#ruler-readout');
+    if (!box) return;
+    const pts = ruler.points.concat(ruler.hover && ruler.points.length ? [ruler.hover] : []);
+    box.innerHTML = '';
+    if (pts.length < 2) { box.appendChild(el('p', 'muted', ruler.points.length ? 'Click the next point of the route.' : 'Click the map where the party starts, then click along the route they’ll take.')); return; }
+    const real = routeMiles(pts), t = routeTime(real, ruler.mode, ruler.pace);
+    box.appendChild(el('div', 'ruler-time', fmtDuration(t.hours, t.dayHours)));
+    box.appendChild(el('div', 'ruler-sub', `${fmtMi(t.travelMi)} miles of travel · ${TRAVEL[ruler.mode].name.toLowerCase()}, ${PACES[ruler.pace][0].toLowerCase()} pace (${t.perDay} miles a day, ${t.dayHours} hours on the move)`));
+    const blocks = Math.ceil(t.hours / 4 - 1e-9), days = Math.ceil(t.days - 1e-9);
+    const notes = [`${blocks} four-hour travel block${blocks === 1 ? '' : 's'} (a chance of an event in each)`];
+    if (ruler.pace === 1) notes.push(`Endurance check for everyone at the end of each day (${days}). A failure costs 10% sanity and 15% food.`);
+    if (ruler.pace === 2) notes.push(`Tolerance checks every 2 hours past 10 (2 a day, ${days * 2} in all). Each failure costs 10% sanity and 15% food. Can’t be done two days in a row.`);
+    if (ruler.mode !== 'foot') {
+      const cans = Math.max(0, Math.ceil((t.hours - Math.ceil(t.days - 1e-9) * 8) / 2 - 1e-9));
+      notes.push(`Fuel: ${Math.round(t.hours * 2) / 2} hours of engine time. A full tank is 8 hours; each spare can adds 2${cans ? ` (about ${cans} can${cans === 1 ? '' : 's'} if they refill the tank each night)` : ''}.`);
+      notes.push(ruler.mode === 'car' ? 'Breakdown roll each driving day (d20: 1–3). Roads and ferries only.' : 'Weather roll each morning; engine trouble on a d20 of 1–2. Against the tide, fuel burns twice as fast.');
+    }
+    const ul = el('ul', 'ruler-notes');
+    notes.forEach((n) => ul.appendChild(el('li', null, n)));
+    box.appendChild(ul);
+    const cmp = Object.keys(TRAVEL).filter((k) => k !== ruler.mode).map((k) => { const o = routeTime(real, k, ruler.pace); return TRAVEL[k].name + ': ' + fmtDuration(o.hours, o.dayHours); });
+    box.appendChild(el('p', 'tip', 'At the same pace · ' + cmp.join(' · ')));
+  }
+  function showRuler() {
+    if (!editing) return;
+    currentView = 'ruler'; selectedId = null; setTab('ruler'); updateStatus(); popup.remove();
+    if (mode) cancelMode(true);
+    const b = body();
+    if (!ruler.active) startRuler();
+    const seg = (items, cur, onPick) => {
+      const row = el('div', 'ruler-seg');
+      items.forEach(([k, label]) => row.appendChild(btn(label, 'small' + (k === cur ? ' on' : ''), () => onPick(k))));
+      return row;
+    };
+    b.appendChild(el('div', 'sub-h', 'How are they travelling?'));
+    b.appendChild(seg(Object.entries(TRAVEL).map(([k, v]) => [k, v.name]), ruler.mode, (k) => { ruler.mode = k; lsSet(RULER_PREF, { mode: ruler.mode, pace: ruler.pace }); drawRuler(); showRuler(); }));
+    b.appendChild(el('div', 'sub-h', 'Pace'));
+    b.appendChild(seg(PACES.map(([n], i) => [i, n]), ruler.pace, (i) => { ruler.pace = i; lsSet(RULER_PREF, { mode: ruler.mode, pace: ruler.pace }); drawRuler(); showRuler(); }));
+    const ro = el('div', 'ruler-readout');
+    ro.id = 'ruler-readout';
+    b.appendChild(ro);
+    updateRulerReadout();
+    const row = el('div', 'btn-row');
+    row.appendChild(btn('Undo last point', 'small', () => { ruler.points.pop(); ruler.hover = null; drawRuler(); showRuler(); }));
+    row.appendChild(btn('Clear', 'small ghost', () => { ruler.points = []; ruler.hover = null; drawRuler(); showRuler(); }));
+    b.appendChild(row);
+    b.appendChild(el('p', 'tip', 'Small dots mark every 4 hours of travel; big dots mark the end of each day. Esc clears the route. Only you see the ruler.'));
+    // Map scale
+    const sc = el('input');
+    sc.type = 'number'; sc.min = '1'; sc.max = '20'; sc.step = '0.5'; sc.value = String(data.travel.scale);
+    sc.onchange = () => { data.travel.scale = Math.min(20, Math.max(1, +sc.value || TRAVEL_SCALE_DEFAULT)); changed(); drawRuler(); showRuler(); };
+    b.appendChild(field('Map scale: 1 mile on the map = this many miles of travel', sc));
+    const across = routeMiles([[LOCK_BOUNDS[0][0], (LOCK_BOUNDS[0][1] + LOCK_BOUNDS[1][1]) / 2], [LOCK_BOUNDS[1][0], (LOCK_BOUNDS[0][1] + LOCK_BOUNDS[1][1]) / 2]]);
+    const cross = (k) => fmtDuration(routeTime(across, k, 0).hours, PACES[0][1]);
+    b.appendChild(el('p', 'tip', `Right now, crossing the whole map at an average pace takes ${cross('foot')} on foot, ${cross('car')} by car or ${cross('boat')} by boat. Publish after changing the scale so it’s saved.`));
   }
 
   // --- Characters: every player's saved sheet, read-only ---
