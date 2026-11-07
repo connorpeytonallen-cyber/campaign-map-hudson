@@ -544,6 +544,9 @@
 
     renderAll();
     startParty();
+    // Keep the sound control beside the party box as it opens, closes or grows.
+    if (window.ResizeObserver) new ResizeObserver(placeSoundCtl).observe($('#party'));
+    window.addEventListener('resize', placeSoundCtl);
     const unseen = unseenQuests().length;
     if (unseen) toast(`${unseen} new quest${unseen === 1 ? '' : 's'} in your logbook`, 'quest', 9000, () => toggleLog(true, 'quests'));
     checkHash();
@@ -1683,7 +1686,7 @@
     head.appendChild(el('span', 'party-chev', open ? '▴' : '▾'));
     head.onclick = () => { lsSet(PARTY_OPEN_KEY, !open); partyEdit = null; renderParty(); };
     box.appendChild(head);
-    if (!open) return;
+    if (!open) { placeSoundCtl(); return; }
     const list = el('div', 'party-list');
     all.forEach((p) => {
       const row = el('button', 'party-row' + (p.you ? ' you' : ''));
@@ -1714,6 +1717,7 @@
     }
     box.appendChild(list);
     fillDiceControls();
+    placeSoundCtl();
   }
   function openPartyEditor(p) {
     if (!p) return;
@@ -2168,18 +2172,41 @@
     box.hidden = false;
     if (!soundOn) {
       box.appendChild(btn('Enable sound', 'small', () => { soundOn = true; renderSoundCtl(); syncLoops(); }));
+      placeSoundCtl();
       return;
     }
-    const mute = btn(soundPrefs.muted ? 'Unmute' : 'Mute', 'small ghost', () => {
-      soundPrefs.muted = !soundPrefs.muted; lsSet(SOUND_PREFS_KEY, soundPrefs); applyVolumes(); renderSoundCtl();
-    });
-    box.appendChild(el('span', 'sound-label', 'Sound'));
-    const r = el('input');
-    r.type = 'range'; r.min = '0'; r.max = '1'; r.step = '0.05'; r.value = String(soundPrefs.volume);
-    r.setAttribute('aria-label', 'Volume');
-    r.oninput = () => { soundPrefs.volume = +r.value; lsSet(SOUND_PREFS_KEY, soundPrefs); applyVolumes(); };
-    box.appendChild(r);
-    box.appendChild(mute);
+    // Speaker button folds the control away (or opens it again).
+    const quiet = soundPrefs.muted || soundPrefs.volume === 0;
+    const icon = el('button', 'sound-icon');
+    icon.type = 'button';
+    icon.title = soundPrefs.collapsed ? 'Show sound controls' : 'Hide sound controls';
+    icon.setAttribute('aria-expanded', String(!soundPrefs.collapsed));
+    icon.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/>' +
+      (quiet ? '<path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>'
+        : '<path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>') + '</svg>';
+    icon.onclick = () => { soundPrefs.collapsed = !soundPrefs.collapsed; lsSet(SOUND_PREFS_KEY, soundPrefs); renderSoundCtl(); };
+    box.appendChild(icon);
+    box.classList.toggle('collapsed', !!soundPrefs.collapsed);
+    if (!soundPrefs.collapsed) {
+      const r = el('input');
+      r.type = 'range'; r.min = '0'; r.max = '1'; r.step = '0.05'; r.value = String(soundPrefs.volume);
+      r.setAttribute('aria-label', 'Volume');
+      r.oninput = () => { soundPrefs.volume = +r.value; lsSet(SOUND_PREFS_KEY, soundPrefs); applyVolumes(); };
+      box.appendChild(r);
+      box.appendChild(btn(soundPrefs.muted ? 'Unmute' : 'Mute', 'small ghost', () => {
+        soundPrefs.muted = !soundPrefs.muted; lsSet(SOUND_PREFS_KEY, soundPrefs); applyVolumes(); renderSoundCtl();
+      }));
+    }
+    placeSoundCtl();
+  }
+  // Sit just to the right of the party box, whatever its size.
+  function placeSoundCtl() {
+    const box = $('#sound-ctl'), p = $('#party');
+    if (!box || box.hidden || !p) return;
+    const r = p.getBoundingClientRect();
+    if (!r.width) { box.style.left = '14px'; box.style.top = '14px'; return; }
+    box.style.left = Math.round(r.right + 10) + 'px';
+    box.style.top = Math.round(r.top) + 'px';
   }
   function readFileAsDataURL(file) {
     return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => rej(fr.error); fr.readAsDataURL(file); });
