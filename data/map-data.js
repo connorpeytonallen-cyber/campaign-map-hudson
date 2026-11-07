@@ -3106,11 +3106,23 @@ window.MAP_DATA = {
       "id": "pmw60l5ftyzua",
       "title": "The Missing Scout",
       "description": "\"A scout named Pruitt went across the bridge toward Joe’s Fish Factory three days ago and has not come back.\"\n",
-      "status": "active",
+      "status": "done",
       "giver": "Nickel",
       "locationId": "pmw4fyq1snq33",
       "lng": -79.930233,
       "lat": 32.783567,
+      "revealed": true,
+      "scale": 1
+    },
+    {
+      "id": "pmw60mrf0vfto",
+      "title": "Clear the Woods",
+      "description": "\"Someone or something has been taking scouts and soldiers alike from Nickel's forces. Find out what's causing these disappearances.\"",
+      "status": "active",
+      "giver": "Nickel",
+      "locationId": "pmw4fyq1snq33",
+      "lng": -79.879628,
+      "lat": 32.795222,
       "revealed": true,
       "scale": 1
     }
