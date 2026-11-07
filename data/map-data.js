@@ -2964,7 +2964,7 @@ window.MAP_DATA = {
       "bodyFont": "",
       "textSize": "",
       "color": "",
-      "image": "images/example-bastion.svg",
+      "image": "",
       "symbol": "ship",
       "symbolColor": "",
       "scale": 1,
