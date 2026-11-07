@@ -7546,122 +7546,125 @@ window.MAP_DATA = {
       "name": "Insistent",
       "audio": "sounds/pmw6z8gvdvj8i-mw6zvpno0.mp3",
       "loop": true,
-      "volume": 0.8,
-      "cat": "music"
+      "cat": "music",
+      "volume": 0.8
     },
     {
       "id": "pmw6za6wvuk79",
       "name": "Wind_Calm",
       "audio": "sounds/pmw6za6wvuk79-mw6zvpnp1.mp3",
       "loop": true,
-      "volume": 0.8,
-      "cat": "ambience"
+      "cat": "ambience",
+      "volume": 0.8
     },
     {
       "id": "pmw6zb0narbqv",
       "name": "Wind_Howling",
       "audio": "sounds/pmw6zb0narbqv-mw6zvpnp2.mp3",
       "loop": true,
-      "volume": 0.8,
-      "cat": "ambience"
+      "cat": "ambience",
+      "volume": 0.8
     },
     {
       "id": "pmw6zbprszkxm",
       "name": "Eldritch_Whispers_1",
       "audio": "sounds/pmw6zbprszkxm-mw6zvpnq3.mp3",
       "loop": false,
-      "volume": 0.8,
-      "cat": "ambience"
+      "cat": "ambience",
+      "volume": 0.8
     },
     {
       "id": "pmw6zbprt3r3n",
       "name": "Eldritch_Whispers_2",
       "audio": "sounds/pmw6zbprt3r3n-mw6zvpnq4.mp3",
       "loop": false,
-      "volume": 0.8,
-      "cat": "ambience"
+      "cat": "ambience",
+      "volume": 0.8
     },
     {
       "id": "pmw6zcsuu2d1p",
       "name": "Huypier_Standby",
       "audio": "sounds/pmw6zcsuu2d1p-mw6zvpnq5.mp3",
       "loop": false,
-      "volume": 0.8,
-      "cat": "monsters"
+      "cat": "monsters",
+      "volume": 0.8
     },
     {
       "id": "pmw6zdcrv8ulo",
       "name": "Huypier_Distant",
       "audio": "sounds/pmw6zdcrv8ulo-mw6zvpnr6.mp3",
       "loop": false,
-      "volume": 0.8,
-      "cat": "monsters"
+      "cat": "monsters",
+      "volume": 0.8
     },
     {
       "id": "pmw6zdrnw799d",
       "name": "Huypier_Growl",
       "audio": "sounds/pmw6zdrnw799d-mw6zvpnr7.mp3",
       "loop": false,
-      "volume": 0.8,
-      "cat": "monsters"
+      "cat": "monsters",
+      "volume": 0.8
     },
     {
       "id": "pmw6znikplmy6",
       "name": "Crush_1",
       "audio": "sounds/pmw6znikplmy6-mw6zvpnr8.mp3",
       "loop": false,
-      "volume": 0.8,
-      "cat": "physical"
+      "cat": "physical",
+      "volume": 0.8
     },
     {
       "id": "pmw6znub6iuqz",
       "name": "Pierce_1",
       "audio": "sounds/pmw6znub6iuqz-mw6zvpnr9.mp3",
       "loop": false,
-      "volume": 0.8,
-      "cat": "physical"
+      "cat": "physical",
+      "volume": 0.8
     },
     {
       "id": "pmw6zodbvs4in",
       "name": "Stab_1",
       "audio": "sounds/pmw6zodbvs4in-mw6zvpnr10.mp3",
       "loop": false,
-      "volume": 0.8,
-      "cat": "physical"
+      "cat": "physical",
+      "volume": 0.8
     },
     {
       "id": "pmw6zowtn4lhz",
       "name": "Punch_1",
       "audio": "sounds/pmw6zowtn4lhz-mw6zvpnr11.mp3",
       "loop": false,
-      "volume": 0.8,
-      "cat": "physical"
+      "cat": "physical",
+      "volume": 0.8
     },
     {
       "id": "pmw6zq0nyo5cr",
       "name": "Punch_2",
       "audio": "sounds/pmw6zq0nyo5cr-mw6zvpnr12.mp3",
       "loop": false,
-      "volume": 0.8,
-      "cat": "physical"
+      "cat": "physical",
+      "volume": 0.8
     },
     {
       "id": "pmw6zq0nyw7av",
       "name": "Punch_3",
       "audio": "sounds/pmw6zq0nyw7av-mw6zvpnr13.mp3",
       "loop": false,
-      "volume": 0.8,
-      "cat": "physical"
+      "cat": "physical",
+      "volume": 0.8
     }
   ],
   "fogStyle": {
     "look": "smoke",
-    "darkness": 0.85,
+    "darkness": 1,
     "thickness": 0.98,
     "tint": "#24242c",
     "speed": 0.5,
     "dir": 0,
     "pulse": true,
     "seed": 7
+  },
+  "travel": {
+    "scale": 4
   }
 };
