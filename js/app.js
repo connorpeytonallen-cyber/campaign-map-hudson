@@ -3721,11 +3721,14 @@
   }
 
   // ===== In-game clock: the DM sets it, moving the party advances it, the map darkens at night =====
-  // Time is counted in minutes since 6:00 AM on Day 1; each day runs 6 AM to 6 AM.
+  // Time is counted in minutes since 8:00 AM on Day 1; each day runs 8 AM to 8 AM. Only the DM sees the clock;
+  // players just see the map's lighting change.
   const CLOCK_KEY = () => 'campaign-map.clock:' + SITE_KEY;
-  const DAY_START = 360; // 6:00 AM
+  const DAY_START = 480; // 8:00 AM
   let clock = null, clockOpen = false;
-  const cleanClock = (c) => (c && typeof c === 'object' && num(c.abs) != null ? { abs: Math.max(0, Math.round(num(c.abs))), ts: num(c.ts) || 0 } : null);
+  // Clocks saved before the day moved to 8 AM counted from 6 AM: shift them so the time of day stays the same.
+  const cleanClock = (c) => (c && typeof c === 'object' && num(c.abs) != null
+    ? { abs: Math.max(0, Math.round(num(c.abs)) - (num(c.start) === DAY_START ? 0 : DAY_START - 360)), start: DAY_START, ts: num(c.ts) || 0 } : null);
   const clockDay = (abs) => Math.floor(abs / 1440) + 1;
   const clockTod = (abs) => (DAY_START + abs) % 1440; // minutes after midnight
   const isNight = (tod) => tod >= 20 * 60 || tod < 6 * 60;
@@ -3738,7 +3741,7 @@
     return h < 4 ? 'Dead of night' : h < 6 ? 'Before dawn' : h < 8 ? 'Dawn' : h < 12 ? 'Morning' : h < 14 ? 'Midday' : h < 18 ? 'Afternoon' : h < 20 ? 'Dusk' : 'Night';
   }
   function setClock(abs, note) {
-    clock = { abs: Math.max(0, Math.round(abs)), ts: Date.now() };
+    clock = { abs: Math.max(0, Math.round(abs)), start: DAY_START, ts: Date.now() };
     lsSet(CLOCK_KEY(), clock);
     if (relay && relay.connected) relay.publish(`${ROOM}/clock`, JSON.stringify(clock), { retain: true });
     renderClock();
@@ -3793,15 +3796,12 @@
     if (!box && map) { box = el('div'); box.id = 'clock'; map.getContainer().appendChild(box); }
     if (!box) return;
     box.innerHTML = '';
-    if (!clock && !editing) { box.hidden = true; return; }
+    if (!editing) { box.hidden = true; return; } // players never see the time
     box.hidden = false;
     const face = el('button', 'clock-face');
     face.type = 'button';
     if (clock) {
       const tod = clockTod(clock.abs);
-      face.innerHTML = (isNight(tod)
-        ? '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M20 15.5A8.5 8.5 0 0 1 8.5 4a8.5 8.5 0 1 0 11.5 11.5z"/></svg>'
-        : '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>');
       face.appendChild(el('span', 'clock-day', 'Day ' + clockDay(clock.abs)));
       face.appendChild(el('b', 'clock-time', fmtClock(tod)));
       face.appendChild(el('span', 'clock-phase', dayPhase(tod)));
@@ -3821,9 +3821,9 @@
     const row = el('div', 'clock-row');
     row.appendChild(field('Day', dayIn)); row.appendChild(field('Time', timeIn));
     p.appendChild(row);
-    p.appendChild(el('p', 'tip', 'Each day starts at 6:00 AM, so 2:00 AM belongs to the night at the end of that day.'));
+    p.appendChild(el('p', 'tip', 'Each day starts at 8:00 AM, so 2:00 AM belongs to the night at the end of that day. Players don’t see the clock, only the light changing.'));
     p.appendChild(btn(clock ? 'Set time' : 'Start the clock', 'small primary', () => {
-      const [h, m] = (timeIn.value || '06:00').split(':').map((v) => +v || 0);
+      const [h, m] = (timeIn.value || '08:00').split(':').map((v) => +v || 0);
       const d = Math.max(1, Math.round(+dayIn.value || 1));
       setClock((d - 1) * 1440 + (((h * 60 + m) - DAY_START + 1440) % 1440));
     }));
@@ -3833,7 +3833,7 @@
       q.appendChild(btn('+4 hours', 'small', () => setClock(clock.abs + 240)));
       q.appendChild(btn('−1 hour', 'small ghost', () => setClock(clock.abs - 60)));
       p.appendChild(q);
-      p.appendChild(btn('Skip to 6:00 AM (next day)', 'small accent', () => setClock((Math.floor(clock.abs / 1440) + 1) * 1440)));
+      p.appendChild(btn('Skip to 8:00 AM (next day)', 'small accent', () => setClock((Math.floor(clock.abs / 1440) + 1) * 1440)));
       const al = el('label', 'check');
       const ac = el('input'); ac.type = 'checkbox'; ac.checked = partyTravel.advance;
       ac.onchange = () => { partyTravel.advance = ac.checked; savePartyTravel(); };
