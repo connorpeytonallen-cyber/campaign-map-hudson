@@ -90,6 +90,7 @@
   const safeColor = (c, fallback = PIN_COLORS[0]) => (/^#[0-9a-f]{6}$/i.test(c || '') ? c.toLowerCase() : fallback);
   const fontInfo = (name) => FONTS.find((f) => f.name === name);
   // Sound categories in the DM's sound board ('' = not sorted yet).
+  const PROWESS_KEYS = ['power', 'reflex', 'outlook', 'wit', 'endurance', 'social', 'serendipity'], STAT_MAX_M = 10;
   const SOUND_CATS = [['music', 'Background Music'], ['ambience', 'Ambience'], ['physical', 'Physical Effects'], ['monsters', 'Monsters'], ['interactive', 'Interactive'], ['', 'Unsorted']];
   // Travel per day for a party of 4, in travel miles: [average, brisk, non-stop].
   const TRAVEL = {
@@ -266,6 +267,7 @@
       fog: [],
       stickers: [],
       monsters: [],
+      bestiary: [],
       sounds: []
     };
     for (const s of arr(d.sounds)) {
@@ -277,17 +279,31 @@
         volume: Math.min(1, Math.max(0.05, num(s.volume) == null ? 0.8 : num(s.volume)))
       });
     }
+    // Monsters: the DM's own stat blocks (never shown to players), using P.R.O.W.E.S.S.
     for (const m of arr(d.monsters)) {
       if (!m) continue;
-      const score = (v) => Math.min(30, Math.max(1, Math.round(num(v) || 10)));
+      const old = !m.prowess; // older D&D-style block: keep its extra lines in the notes so nothing is lost
+      const pr = {};
+      PROWESS_KEYS.forEach((k) => { pr[k] = Math.min(STAT_MAX_M, Math.max(0, Math.round(num(m.prowess && m.prowess[k]) || 0))); });
+      let notes = str(m.notes), actions = str(m.actions);
+      if (old) {
+        const extra = [['Saving throws', m.saves], ['Skills', m.skills], ['Senses', m.senses], ['Languages', m.languages], ['Challenge', m.cr]]
+          .filter(([, v]) => str(v).trim()).map(([k, v]) => `${k}: ${str(v)}`);
+        if (str(m.legendary).trim()) actions = (actions ? actions + '\n' : '') + str(m.legendary);
+        if (extra.length) notes = (notes ? notes + '\n' : '') + extra.join('\n');
+      }
       out.monsters.push({
         id: str(m.id) || uid(), name: str(m.name), meta: str(m.meta), image: safeImageSrc(m.image),
-        ac: str(m.ac), hp: str(m.hp), speed: str(m.speed),
-        str: score(m.str), dex: score(m.dex), con: score(m.con), int: score(m.int), wis: score(m.wis), cha: score(m.cha),
-        saves: str(m.saves), skills: str(m.skills), resist: str(m.resist), senses: str(m.senses), languages: str(m.languages), cr: str(m.cr),
-        traits: str(m.traits), actions: str(m.actions), reactions: str(m.reactions), legendary: str(m.legendary), notes: str(m.notes),
-        revealed: !!m.revealed
+        health: str(old ? m.hp : m.health), ac: str(m.ac), speed: str(m.speed), prowess: pr,
+        resist: str(m.resist), sanity: str(m.sanity),
+        traits: str(m.traits), actions, reactions: str(m.reactions), notes
       });
+    }
+    // Bestiary: pictures the players can see in their Logbook.
+    const oldBeasts = Array.isArray(d.bestiary) ? d.bestiary : arr(d.monsters).filter((m) => m && m.revealed && !m.prowess).map((m) => ({ id: 'b-' + str(m.id), name: m.name, image: m.image, description: m.meta, revealed: true }));
+    for (const x of oldBeasts) {
+      if (!x) continue;
+      out.bestiary.push({ id: str(x.id) || uid(), name: str(x.name), image: safeImageSrc(x.image), description: str(x.description), revealed: x.revealed !== false });
     }
     for (const s of arr(d.stickers)) {
       if (!s || num(s.lng) == null || num(s.lat) == null) continue;
@@ -1769,7 +1785,7 @@
     lb.appendChild(sheetHead('Logbook', () => toggleLog(false)));
     const quests = visibleQuests(data);
     const unseen = new Set(unseenQuests().map((q) => q.id));
-    const beasts = data.monsters.filter((m) => m.revealed);
+    const beasts = data.bestiary.filter((x) => x.revealed);
     const tabs = [['character', 'Character'], ['vitals', 'Sanity & Hunger'], ['notes', 'My notes'], ['quests', `Quests${unseen.size ? ' (' + unseen.size + ' new)' : ''}`], ['people', 'People']];
     if (beasts.length) tabs.push(['bestiary', 'Bestiary']);
     if (logTab === 'bestiary' && !beasts.length) logTab = 'character';
@@ -1804,7 +1820,7 @@
       });
       if (!any) body.appendChild(el('p', 'empty', 'Nobody yet. People you meet show up here.'));
     } else if (logTab === 'bestiary') {
-      beasts.forEach((m) => body.appendChild(statBlock(m)));
+      beasts.forEach((x) => body.appendChild(beastCard(x)));
     } else {
       const ta = el('textarea', 'notes');
       ta.placeholder = 'Write anything you want to remember: clues, names, debts, theories…';
@@ -3067,6 +3083,8 @@
     for (const p of party.values()) if (!p.dm) names[p.id] = p.name || names[p.id] || 'Unnamed';
     Object.keys(all).forEach((id) => { if (!names[id]) names[id] = 'Unknown player'; });
     delete names[me.id];
+    const now = Date.now();
+    for (const [id, k] of kicked) if (k.until > now) delete names[id]; // kicked players drop off the list
     const ids = Object.keys(names);
     const wrap = el('div', 'vit-table');
     wrap.appendChild(el('div', 'sub-h', 'Sanity & hunger'));
@@ -3074,7 +3092,11 @@
     ids.forEach((id) => {
       const v = cleanVitals(all[id]);
       const row = el('div', 'vit-player');
-      row.appendChild(el('b', 'vit-pname', (sheets[id] && sheets[id].sheet.name) ? `${sheets[id].sheet.name} · ${names[id]}` : names[id]));
+      const head = el('div', 'vit-phead');
+      head.appendChild(el('b', 'vit-pname', (sheets[id] && sheets[id].sheet.name) ? `${sheets[id].sheet.name} · ${names[id]}` : names[id]));
+      const p = party.get(id), online = !!(p && now - p.ts < ONLINE_MS);
+      head.appendChild(btn(online ? 'Kick' : 'Remove', 'small ghost danger-text', () => removePlayer(id, names[id], online ? p : null)));
+      row.appendChild(head);
       const set = (k) => (nv) => { const cur = cleanVitals((lsGet(DM_VITALS_KEY(), {}) || {})[id]); cur[k] = nv; publishVitals(id, cur); showCharacters(selectedId); };
       row.appendChild(vitalMeter('sanity', v.sanity, set('sanity'), true));
       row.appendChild(vitalMeter('hunger', v.hunger, set('hunger'), true));
@@ -3086,6 +3108,20 @@
     allRow.appendChild(btn(`Everyone: missed food (−${DAILY_FOOD}%)`, 'small', everyone('hunger', DAILY_FOOD)));
     wrap.appendChild(allRow);
     return wrap;
+  }
+  // Forget a player everywhere on the DM's side (levels, name, saved sheet, abilities). Online players are kicked too,
+  // otherwise they'd pop straight back in.
+  async function removePlayer(id, name, onlinePlayer) {
+    const who = name || 'this player';
+    const msg = onlinePlayer
+      ? `Kick ${who}? They’re removed from the session for 24 hours (you can let them back in from the party list), and their sanity, hunger and saved sheet are cleared from your list.`
+      : `Remove ${who} from your list? Their sanity, hunger and saved sheet are cleared. If they open the map again, they show up again.`;
+    if (!(await ask(msg, onlinePlayer ? 'Kick' : 'Remove', 'Keep them'))) return;
+    if (onlinePlayer) kickPlayer(onlinePlayer);
+    [DM_VITALS_KEY(), KNOWN_KEY(), DM_SHEETS_KEY(), DM_ABIL_KEY()].forEach((key) => { const o = lsGet(key, {}) || {}; if (id in o) { delete o[id]; lsSet(key, o); } });
+    if (relay && relay.connected) ['vitals', 'sheet'].forEach((t) => relay.publish(`${ROOM}/${t}/${id}`, '', { retain: true }));
+    if (!onlinePlayer) party.delete(id);
+    showCharacters();
   }
   // A new in-game day: everyone gets hungrier.
   function dailyFood(days) {
@@ -3294,7 +3330,8 @@
     else if (currentView === 'region' && byRegion(selectedId)) showRegionForm(byRegion(selectedId));
     else if (currentView === 'fogarea' && byFog(selectedId)) showFogForm(byFog(selectedId));
     else if (currentView === 'sticker' && byStickerId(selectedId)) showStickerForm(byStickerId(selectedId));
-    else if (currentView === 'monster' && byMonster(selectedId)) showMonsterForm(byMonster(selectedId));
+    else if (currentView === 'monster' && data.monsters.some((m) => m.id === selectedId)) showMonsterForm(data.monsters.find((m) => m.id === selectedId));
+    else if (currentView === 'monster' && data.bestiary.some((x) => x.id === selectedId)) showBeastForm(data.bestiary.find((x) => x.id === selectedId));
     else if (currentView === 'monsters' || currentView === 'monster') showMonsters();
     else if (currentView === 'sounds') showSounds();
     else if (currentView === 'characters') showCharacters(selectedId);
@@ -3701,6 +3738,30 @@
     li.appendChild(b);
     return li;
   }
+  // A search box that filters a list in place. The query is kept per list while the editor is open.
+  const listQueries = {};
+  function listSearch(key, ul, placeholder) {
+    const wrap = el('div', 'list-search');
+    const i = el('input');
+    i.type = 'search'; i.placeholder = placeholder; i.autocomplete = 'off'; i.value = listQueries[key] || '';
+    const none = el('p', 'muted list-none', 'No matches.');
+    const apply = () => {
+      const q = i.value.trim().toLowerCase();
+      listQueries[key] = i.value;
+      let shown = 0;
+      ul.querySelectorAll(':scope > li').forEach((li) => {
+        const hit = !q || (li.textContent + ' ' + (li.dataset.q || '')).toLowerCase().includes(q);
+        li.hidden = !hit; if (hit) shown++;
+      });
+      none.hidden = shown > 0;
+    };
+    i.oninput = apply;
+    i.onkeydown = (e) => { if (e.key === 'Escape' && i.value) { e.stopPropagation(); i.value = ''; apply(); } };
+    wrap.appendChild(i);
+    wrap.appendChild(none);
+    requestAnimationFrame(apply);
+    return wrap;
+  }
   function showList() {
     currentView = 'list'; selectedId = null; setTab('list'); updateStatus();
     const b = body();
@@ -3731,8 +3792,12 @@
     b.appendChild(pt);
     if (!data.locations.length) { b.appendChild(el('p', 'muted', 'No pins yet.')); return; }
     const ul = el('ul', 'pin-list');
-    data.locations.forEach((loc) => ul.appendChild(listButton(safeColor(loc.color || data.defaults.color), loc.name || 'Untitled place',
-      loc.mystery ? ['hidden', '???'] : loc.kind === 'settlement' ? ['settle', 'Settlement'] : null, () => selectPin(loc.id, true))));
+    data.locations.forEach((loc) => {
+      const li = ul.appendChild(listButton(safeColor(loc.color || data.defaults.color), loc.name || 'Untitled place',
+        loc.mystery ? ['hidden', '???'] : loc.kind === 'settlement' ? ['settle', 'Settlement'] : null, () => selectPin(loc.id, true)));
+      li.dataset.q = [loc.description, loc.loot, loc.shops.map((s) => s.name + ' ' + s.keeper).join(' '), loc.npcs.map((n) => n.name + ' ' + n.role).join(' ')].join(' ');
+    });
+    b.appendChild(listSearch('pins', ul, 'Search pins…'));
     b.appendChild(ul);
   }
   // DM-only loot notes / loot table for a pin. Never shown to players.
@@ -3858,7 +3923,8 @@
     if (!data.regions.length) b.appendChild(el('p', 'muted', 'No regions yet. Regions are shaded areas with a big name, for kingdoms, forests, wastelands…'));
     else {
       const ul = el('ul', 'pin-list');
-      data.regions.forEach((r) => ul.appendChild(listButton(r.color, r.name || 'Unnamed region', null, () => selectRegion(r.id, null, true))));
+      data.regions.forEach((r) => { ul.appendChild(listButton(r.color, r.name || 'Unnamed region', null, () => selectRegion(r.id, null, true))).dataset.q = r.description; });
+      b.appendChild(listSearch('regions', ul, 'Search regions…'));
       b.appendChild(ul);
     }
     const fire = el('div', 'fire-box');
@@ -4815,10 +4881,9 @@
     b.appendChild(foot);
   }
 
-  // --- Monster Logbook: stat blocks ---
-  const byMonster = (id) => data.monsters.find((m) => m.id === id);
-  const abilityMod = (s) => { const v = Math.floor((s - 10) / 2); return (v >= 0 ? '+' : '−') + Math.abs(v); };
-  // "Multiattack. The beast makes two attacks." -> bold-italic name, then the text.
+  // --- Monsters: pictures players can see (Bestiary) + the DM's own stat blocks (P.R.O.W.E.S.S) ---
+  let monsterTab = 'players';
+  // "Bite. The creature lunges…" -> bold name, then the text.
   function statText(text) {
     const wrap = el('div', 'sb-text');
     text.split(/\n\s*\n|\n(?=[^\n]{1,60}\.\s)/).map((p) => p.trim()).filter(Boolean).forEach((p) => {
@@ -4836,6 +4901,7 @@
     });
     return wrap;
   }
+  // The DM's stat block. Never shown to players.
   function statBlock(m) {
     const sb = el('div', 'statblock');
     if (m.image) sb.appendChild(zoomImg(m.image, m.name, 'sb-img'));
@@ -4843,91 +4909,132 @@
     if (m.meta) sb.appendChild(el('div', 'sb-meta', m.meta));
     sb.appendChild(el('div', 'sb-rule'));
     const line = (label, value) => { if (!value) return; const d = el('div', 'sb-line'); d.appendChild(el('b', null, label + ' ')); d.appendChild(document.createTextNode(value)); sb.appendChild(d); };
-    line('Armor Class', m.ac); line('Hit Points', m.hp); line('Speed', m.speed);
+    line('Health', m.health); line('Armor class', m.ac); line('Speed (turn order)', m.speed);
     sb.appendChild(el('div', 'sb-rule'));
-    const ab = el('div', 'sb-abilities');
-    [['STR', m.str], ['DEX', m.dex], ['CON', m.con], ['INT', m.int], ['WIS', m.wis], ['CHA', m.cha]].forEach(([k, v]) => {
-      const c = el('div');
-      c.appendChild(el('b', null, k));
-      c.appendChild(el('span', null, `${v} (${abilityMod(v)})`));
+    const ab = el('div', 'sb-prowess');
+    PROWESS.forEach(([k, name]) => {
+      const v = m.prowess[k] || 0, c = el('div');
+      c.appendChild(el('b', null, name));
+      c.appendChild(el('span', null, `${v} (${fmtBonus(statBonus(v))})`));
       ab.appendChild(c);
     });
     sb.appendChild(ab);
-    sb.appendChild(el('div', 'sb-rule'));
-    line('Saving Throws', m.saves); line('Skills', m.skills); line('Resistances / Immunities', m.resist);
-    line('Senses', m.senses); line('Languages', m.languages); line('Challenge', m.cr);
+    if (m.resist || m.sanity) sb.appendChild(el('div', 'sb-rule'));
+    line('Resistances / weaknesses', m.resist); line('Sanity hit', m.sanity);
     if (m.traits.trim()) { sb.appendChild(el('div', 'sb-rule')); sb.appendChild(statText(m.traits)); }
     const section = (title, text) => { if (!text.trim()) return; sb.appendChild(el('h4', 'sb-h', title)); sb.appendChild(statText(text)); };
-    section('Actions', m.actions); section('Reactions', m.reactions); section('Legendary Actions', m.legendary);
+    section('Actions', m.actions); section('Reactions', m.reactions); section('DM notes', m.notes);
     return sb;
   }
-  function showMonsters() {
+  // What players see in their Logbook: a picture, a name and a line or two.
+  function beastCard(x) {
+    const c = el('div', 'beast-card');
+    if (x.image) c.appendChild(zoomImg(x.image, x.name, 'beast-img'));
+    c.appendChild(el('h3', 'beast-name', x.name || 'Unknown creature'));
+    if (x.description.trim()) { const d = el('div', 'beast-desc'); d.innerHTML = richText(x.description); c.appendChild(d); }
+    return c;
+  }
+  function showMonsters(tab) {
+    if (tab) monsterTab = tab;
     currentView = 'monsters'; selectedId = null; setTab('monsters'); updateStatus(); popup.remove();
     const b = body();
-    b.appendChild(btn('+ Add monster', 'primary list-add', () => {
-      const m = { id: uid(), name: 'New monster', meta: 'Medium aberration, chaotic evil', image: '', ac: '12', hp: '22 (4d8 + 4)', speed: '30 ft.', str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10, saves: '', skills: '', resist: '', senses: 'passive Perception 10', languages: '', cr: '1 (200 XP)', traits: '', actions: '', reactions: '', legendary: '', notes: '', revealed: false };
+    const seg = el('div', 'monster-tabs');
+    [['players', 'Player pictures'], ['dm', 'DM stat blocks']].forEach(([k, label]) => seg.appendChild(btn(label, 'small' + (monsterTab === k ? ' on' : ''), () => showMonsters(k))));
+    b.appendChild(seg);
+    if (monsterTab === 'players') {
+      b.appendChild(btn('+ Add picture', 'primary list-add', () => {
+        const x = { id: uid(), name: 'New creature', image: '', description: '', revealed: true };
+        data.bestiary.push(x); changed(); showBeastForm(x);
+        const n = $('#bf-name'); if (n) { n.focus(); n.select(); }
+      }));
+      b.appendChild(el('p', 'tip', 'Pictures of creatures the party has seen. Shown ones appear in the players’ Logbook under Bestiary. No stats are ever shown here.'));
+      if (!data.bestiary.length) { b.appendChild(el('p', 'muted', 'No pictures yet.')); return; }
+      const ul = el('ul', 'pin-list');
+      data.bestiary.forEach((x) => { ul.appendChild(listButton('#8a8a94', x.name || 'Unknown creature', x.revealed ? ['done', 'Shown'] : ['hidden', 'Hidden'], () => showBeastForm(x))).dataset.q = x.description; });
+      b.appendChild(listSearch('bestiary', ul, 'Search pictures…'));
+      b.appendChild(ul);
+      return;
+    }
+    b.appendChild(btn('+ Add stat block', 'primary list-add', () => {
+      const pr = {}; PROWESS_KEYS.forEach((k) => { pr[k] = 2; });
+      const m = { id: uid(), name: 'New monster', meta: '', image: '', health: '20', ac: '12', speed: '3', prowess: pr, resist: '', sanity: '', traits: '', actions: '', reactions: '', notes: '' };
       data.monsters.push(m); changed(); showMonsterForm(m);
       const n = $('#mf-name'); if (n) { n.focus(); n.select(); }
     }));
-    b.appendChild(el('p', 'tip', 'Stat blocks for monsters you have on hand. Only you see them, unless you turn on “Show to players”, which adds that monster to the players’ Logbook under Bestiary.'));
-    if (!data.monsters.length) { b.appendChild(el('p', 'muted', 'No monsters yet.')); return; }
+    b.appendChild(el('p', 'tip', 'Only you see these. Stat blocks never appear anywhere on the players’ map.'));
+    if (!data.monsters.length) { b.appendChild(el('p', 'muted', 'No stat blocks yet.')); return; }
     const ul = el('ul', 'pin-list');
-    data.monsters.forEach((m) => ul.appendChild(listButton('#c0392b', m.name || 'Unnamed creature', m.revealed ? ['done', 'Shown'] : ['hidden', 'DM only'], () => showMonsterForm(m))));
+    data.monsters.forEach((m) => { ul.appendChild(listButton('#c0392b', m.name || 'Unnamed creature', ['hidden', 'DM only'], () => showMonsterForm(m))).dataset.q = m.meta + ' ' + m.traits + ' ' + m.actions; });
+    b.appendChild(listSearch('monsters', ul, 'Search stat blocks…'));
     b.appendChild(ul);
+  }
+  function showBeastForm(x) {
+    currentView = 'monster'; selectedId = x.id; setTab(null); updateStatus(); popup.remove();
+    const b = body();
+    b.appendChild(el('div', 'form-head')).appendChild(btn('← All pictures', 'ghost small', () => showMonsters('players')));
+    const vis = el('div', 'reveal-box' + (x.revealed ? ' on' : ''));
+    vis.appendChild(el('div', null, x.revealed ? 'Players can see this in their Logbook.' : 'Hidden: players can’t see this yet.'));
+    vis.appendChild(btn(x.revealed ? 'Hide from players' : 'Show to players', 'small' + (x.revealed ? ' ghost' : ' accent'), () => { x.revealed = !x.revealed; changed(); showBeastForm(x); }));
+    b.appendChild(vis);
+    const name = textInput(x.name, (v) => { x.name = v; changed(); });
+    name.id = 'bf-name'; name.maxLength = 140;
+    b.appendChild(field('Name players see', name));
+    b.appendChild(imageField(x, changed, 'Picture'));
+    b.appendChild(field('What the players know (optional)', textInput(x.description, (v) => { x.description = v; changed(); }, { multiline: true, rows: 3, placeholder: 'Seen in the marsh near the old mill. Smells of brine.' })));
+    const foot = el('div', 'form-foot');
+    foot.appendChild(btn('Delete picture', 'danger', async () => {
+      if (!(await ask(`Delete “${x.name || 'this picture'}”?`, 'Delete', 'Keep it'))) return;
+      data.bestiary = data.bestiary.filter((y) => y !== x); changed(); showMonsters('players');
+    }));
+    foot.appendChild(btn('Done', 'primary', () => showMonsters('players')));
+    b.appendChild(foot);
   }
   function showMonsterForm(m) {
     currentView = 'monster'; selectedId = m.id; setTab(null); updateStatus(); popup.remove();
     const b = body();
-    b.appendChild(el('div', 'form-head')).appendChild(btn('← All monsters', 'ghost small', showMonsters));
+    b.appendChild(el('div', 'form-head')).appendChild(btn('← All stat blocks', 'ghost small', () => showMonsters('dm')));
+    b.appendChild(el('p', 'tip', 'DM only. Players never see stat blocks.'));
     const preview = el('div', 'sb-preview');
     const redraw = () => { preview.innerHTML = ''; preview.appendChild(statBlock(m)); changed(); };
-    const vis = el('label', 'check');
-    const vc = el('input');
-    vc.type = 'checkbox'; vc.checked = m.revealed;
-    vc.onchange = () => { m.revealed = vc.checked; changed(); };
-    vis.appendChild(vc);
-    vis.appendChild(document.createTextNode(' Show to players (in their Logbook)'));
-    b.appendChild(vis);
     const t = (key, label, opts) => { const i = textInput(m[key], (v) => { m[key] = v; redraw(); }, opts || {}); if (key === 'name') i.id = 'mf-name'; b.appendChild(field(label, i)); };
     t('name', 'Name');
-    t('meta', 'Size, type, alignment', { placeholder: 'Large aberration, chaotic evil' });
+    t('meta', 'What it is (optional)', { placeholder: 'Large horror, from the deep' });
     const r1 = el('div', 'row3');
-    [['ac', 'Armor Class', '15 (natural armor)'], ['hp', 'Hit Points', '45 (6d10 + 12)'], ['speed', 'Speed', '30 ft., swim 40 ft.']].forEach(([k, l, ph]) => r1.appendChild(field(l, textInput(m[k], (v) => { m[k] = v; redraw(); }, { placeholder: ph }))));
+    [['health', 'Health', '45'], ['ac', 'Armor class', '14'], ['speed', 'Speed (turn order)', '3']].forEach(([k, l, ph]) => r1.appendChild(field(l, textInput(m[k], (v) => { m[k] = v; redraw(); }, { placeholder: ph }))));
     b.appendChild(r1);
-    const abil = el('div', 'row6');
-    ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach((k) => {
+    b.appendChild(el('div', 'sub-h', 'P.R.O.W.E.S.S'));
+    const abil = el('div', 'row-prowess');
+    PROWESS.forEach(([k, name]) => {
       const i = el('input');
-      i.type = 'number'; i.min = '1'; i.max = '30'; i.value = String(m[k]);
-      i.oninput = () => { m[k] = Math.min(30, Math.max(1, Math.round(+i.value || 10))); redraw(); };
-      abil.appendChild(field(k.toUpperCase(), i));
+      i.type = 'number'; i.min = '0'; i.max = String(STAT_MAX_M); i.value = String(m.prowess[k] || 0);
+      const lab = el('span', 'pw-bonus', fmtBonus(statBonus(m.prowess[k] || 0)));
+      i.oninput = () => { m.prowess[k] = Math.min(STAT_MAX_M, Math.max(0, Math.round(+i.value || 0))); lab.textContent = fmtBonus(statBonus(m.prowess[k])); redraw(); };
+      const f = field(name, i);
+      f.appendChild(lab);
+      abil.appendChild(f);
     });
     b.appendChild(abil);
-    t('saves', 'Saving throws', { placeholder: 'Con +5, Wis +3' });
-    t('skills', 'Skills', { placeholder: 'Perception +5, Stealth +4' });
-    t('resist', 'Resistances / immunities', { placeholder: 'cold; poisoned' });
-    t('senses', 'Senses', { placeholder: 'darkvision 120 ft., passive Perception 15' });
-    t('languages', 'Languages', { placeholder: 'understands Deep Speech but can’t speak' });
-    t('cr', 'Challenge', { placeholder: '5 (1,800 XP)' });
-    b.appendChild(el('p', 'tip', 'For traits and actions, start each one with its name and a period, e.g. “Bite. Melee Weapon Attack: +6 to hit…”. One per line.'));
-    t('traits', 'Traits', { multiline: true, rows: 4, placeholder: 'Amphibious. The creature can breathe air and water.' });
-    t('actions', 'Actions', { multiline: true, rows: 5, placeholder: 'Multiattack. The creature makes two Tentacle attacks.\nTentacle. Melee Weapon Attack: +6 to hit, reach 10 ft., one target. Hit: 10 (2d6 + 3) bludgeoning damage.' });
+    t('resist', 'Resistances / weaknesses (optional)', { placeholder: 'Takes double damage from fire' });
+    t('sanity', 'Sanity hit when seen (optional)', { placeholder: '−10% sanity' });
+    b.appendChild(el('p', 'tip', 'For traits and actions, start each one with its name and a period, e.g. “Claw. +4 to hit, 2d6 damage.” One per line.'));
+    t('traits', 'Traits', { multiline: true, rows: 3, placeholder: 'Amphibious. Breathes air and water.' });
+    t('actions', 'Actions', { multiline: true, rows: 4, placeholder: 'Claw. +4 to hit, 2d6 damage.\nShriek. Everyone nearby loses 5% sanity.' });
     t('reactions', 'Reactions (optional)', { multiline: true, rows: 2 });
-    t('legendary', 'Legendary actions (optional)', { multiline: true, rows: 3 });
-    t('notes', 'DM notes (never shown to players)', { multiline: true, rows: 3, placeholder: 'Tactics, loot, where it lairs…' });
-    b.appendChild(imageField(m, redraw, 'Picture (optional)'));
+    t('notes', 'DM notes', { multiline: true, rows: 3, placeholder: 'Tactics, loot, where it lairs…' });
+    b.appendChild(imageField(m, redraw, 'Picture for you (optional)'));
     b.appendChild(el('div', 'sub-h', 'Stat block'));
     b.appendChild(preview);
     preview.appendChild(statBlock(m));
     const foot = el('div', 'form-foot');
-    foot.appendChild(btn('Delete monster', 'danger', async () => {
+    foot.appendChild(btn('Delete stat block', 'danger', async () => {
       if (!(await ask(`Delete “${m.name || 'this monster'}”?`, 'Delete', 'Keep it'))) return;
-      data.monsters = data.monsters.filter((x) => x !== m); changed(); showMonsters();
+      data.monsters = data.monsters.filter((x) => x !== m); changed(); showMonsters('dm');
     }));
     foot.appendChild(btn('Duplicate', 'small', () => {
-      const c = Object.assign(clone(m), { id: uid(), name: m.name + ' (copy)', revealed: false });
+      const c = Object.assign(clone(m), { id: uid(), name: m.name + ' (copy)' });
       data.monsters.push(c); changed(); showMonsterForm(c);
     }));
-    foot.appendChild(btn('Done', 'primary', showMonsters));
+    foot.appendChild(btn('Done', 'primary', () => showMonsters('dm')));
     b.appendChild(foot);
   }
 
@@ -5136,7 +5243,11 @@
     b.appendChild(el('p', 'tip', 'New quests start hidden. Press “Reveal to players” when the party gets one, and it pops up on every open map within a couple of minutes.'));
     if (!data.quests.length) { b.appendChild(el('p', 'muted', 'No quests yet.')); return; }
     const ul = el('ul', 'pin-list');
-    data.quests.forEach((q) => ul.appendChild(listButton(DEFAULTS.color, q.title || 'Untitled quest', q.revealed ? [q.status, QUEST_STATUS[q.status]] : ['hidden', 'Hidden'], () => selectQuest(q.id))));
+    data.quests.forEach((q) => {
+      const l = q.locationId && byId(q.locationId);
+      ul.appendChild(listButton(DEFAULTS.color, q.title || 'Untitled quest', q.revealed ? [q.status, QUEST_STATUS[q.status]] : ['hidden', 'Hidden'], () => selectQuest(q.id))).dataset.q = [q.description, q.giver, l ? l.name : ''].join(' ');
+    });
+    b.appendChild(listSearch('quests', ul, 'Search quests…'));
     b.appendChild(ul);
   }
   function newQuest(locationId) {
