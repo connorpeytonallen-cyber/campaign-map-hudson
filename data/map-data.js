@@ -7660,7 +7660,7 @@ window.MAP_DATA = {
     "thickness": 0.98,
     "tint": "#24242c",
     "speed": 0.5,
-    "dir": 0,
+    "dir": 180,
     "pulse": true,
     "seed": 7
   },
