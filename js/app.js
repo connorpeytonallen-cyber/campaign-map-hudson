@@ -1786,9 +1786,7 @@
     const quests = visibleQuests(data);
     const unseen = new Set(unseenQuests().map((q) => q.id));
     const beasts = data.bestiary.filter((x) => x.revealed);
-    const tabs = [['character', 'Character'], ['vitals', 'Sanity & Hunger'], ['notes', 'My notes'], ['quests', `Quests${unseen.size ? ' (' + unseen.size + ' new)' : ''}`], ['people', 'People']];
-    if (beasts.length) tabs.push(['bestiary', 'Bestiary']);
-    if (logTab === 'bestiary' && !beasts.length) logTab = 'character';
+    const tabs = [['character', 'Character'], ['vitals', 'Sanity & Hunger'], ['notes', 'My notes'], ['quests', `Quests${unseen.size ? ' (' + unseen.size + ' new)' : ''}`], ['people', 'People'], ['bestiary', 'Bestiary']];
     lb.appendChild(tabBar(tabs, logTab, (id) => { logTab = id; renderLog(); }));
     const scroll = el('div', 'sheet-scroll');
     const body = el('div', 'tab-body');
@@ -1820,6 +1818,7 @@
       });
       if (!any) body.appendChild(el('p', 'empty', 'Nobody yet. People you meet show up here.'));
     } else if (logTab === 'bestiary') {
+      if (!beasts.length) body.appendChild(el('p', 'empty', 'No creatures yet. Ones you run into show up here.'));
       beasts.forEach((x) => body.appendChild(beastCard(x)));
     } else {
       const ta = el('textarea', 'notes');
@@ -3421,7 +3420,7 @@
       let f = editId && byFog(editId);
       const shape = [[[...pts, pts[0]]]];
       if (f) f.shape = shape;
-      else { f = { id: uid(), name: 'Fog ' + (data.fog.length + 1), active: true, shape }; data.fog.push(f); }
+      else { f = newFogArea(); addToFog(f, shape); }
       renderFog(); changed(); showFogForm(f);
       return;
     }
@@ -4077,14 +4076,14 @@
   function showFog() {
     currentView = 'fog'; selectedId = null; setTab('fog'); updateStatus(); popup.remove();
     const b = body();
-    b.appendChild(btn('+ Paint new fog', 'primary list-add', () => {
-      const f = { id: uid(), name: 'Fog ' + (data.fog.length + 1), active: true, shape: null };
-      data.fog.push(f); changed(); startBrush(f.id, false);
+    b.appendChild(btn('+ Paint fog', 'primary list-add', () => {
+      const f = newFogArea(); changed(); startBrush(f.id, false);
     }));
     b.appendChild(btn('Fog the whole map', 'small list-add', () => {
       const [[w, s], [e, n]] = LOCK_BOUNDS;
-      const f = { id: uid(), name: 'Whole map', active: true, shape: [[[[w - 0.05, s - 0.05], [e + 0.05, s - 0.05], [e + 0.05, n + 0.05], [w - 0.05, n + 0.05], [w - 0.05, s - 0.05]]]] };
-      data.fog.push(f); renderAll(); changed(); showFogForm(f);
+      const f = newFogArea();
+      f.shape = [[[[w - 0.05, s - 0.05], [e + 0.05, s - 0.05], [e + 0.05, n + 0.05], [w - 0.05, n + 0.05], [w - 0.05, s - 0.05]]]];
+      renderAll(); changed(); showFogForm(f);
     }));
     if (data.fog.some((f) => f.shape)) b.appendChild(btn('Erase fog (reveal explored areas)', 'small list-add', () => startBrush(null, true)));
     b.appendChild(btn('Fog look & movement…', 'small list-add', showFogLook));
@@ -4096,6 +4095,17 @@
       showFogForm(f);
     })));
     b.appendChild(ul);
+    const fogged = data.fog.filter((f) => f.active && f.shape);
+    if (fogged.length > 1) {
+      b.appendChild(btn(`Merge the ${fogged.length} fog areas into one`, 'small list-add', async () => {
+        if (!(await ask('Combine every fogged area into a single “Fog 1”? Lifted areas are left alone.', 'Merge', 'Cancel'))) return;
+        const keep = fogged[0];
+        fogged.slice(1).forEach((f) => addToFog(keep, f.shape));
+        keep.name = 'Fog 1';
+        data.fog = data.fog.filter((f) => f === keep || !fogged.includes(f));
+        renderFog(); changed(); showFog();
+      }));
+    }
     const row = el('div', 'btn-row');
     row.style.marginTop = '12px';
     row.appendChild(btn('Lift all fog', 'small', () => { data.fog.forEach((f) => { f.active = false; }); renderFog(); changed(); showFog(); }));
@@ -5130,10 +5140,15 @@
     b.appendChild(el('p', 'tip', 'Zoom in for finer detail; the brush is measured on screen. You can’t pan while the brush is on, so scroll to zoom and use Done to move around.'));
     b.appendChild(btn('Done', 'primary', () => { const id = m.id; cancelMode(true); const ff = id && byFog(id); if (ff && !m.erase) showFogForm(ff); else showFog(); }));
   }
+  // There's one fog for the whole map: new fog is added to it (no more "Fog 2", "Fog 3"…).
   function newFogArea() {
-    const f = { id: uid(), name: 'Fog ' + (data.fog.length + 1), active: true, shape: null };
-    data.fog.push(f);
+    let f = data.fog.find((x) => x.active && x.shape) || data.fog.find((x) => x.active) || data.fog[0];
+    if (!f) { f = { id: uid(), name: 'Fog 1', active: true, shape: null }; data.fog.push(f); }
+    f.active = true;
     return f;
+  }
+  function addToFog(f, shape) {
+    try { f.shape = f.shape ? tidyShape(polygonClipping.union(f.shape, shape)) : shape; } catch (e) { f.shape = (f.shape || []).concat(shape); }
   }
   function brushCursor() {
     let c = $('#brush-cursor');
