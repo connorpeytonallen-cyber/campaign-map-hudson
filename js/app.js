@@ -5262,7 +5262,7 @@
     const ev = data.events, list = parseEvents(ev.table), s = evtState();
     // Roller
     const out = el('div', 'evt-out');
-    const roll = btn(`🎲 Roll a random event (d${list.length || '?'})`, 'primary list-add', () => {
+    const roll = btn(`Roll a random event (d${list.length || '?'})`, 'primary list-add', () => {
       const r = rollEvent(false, clock ? clock.abs : null);
       if (!r) return;
       out.innerHTML = ''; out.appendChild(eventCard(r.e, `Rolled ${r.e.n} of ${r.of}`));
@@ -5383,7 +5383,7 @@
     now.appendChild(el('div', 'wx-now-name', cur[2] + (weather.roll ? ` (rolled ${weather.roll})` : '')));
     now.appendChild(el('p', null, cur[3]));
     b.appendChild(now);
-    b.appendChild(btn('🎲 Roll the weather (d12)', 'primary list-add', () => rollWeather()));
+    b.appendChild(btn('Roll the weather (d12)', 'primary list-add', () => rollWeather()));
     b.appendChild(el('p', 'tip', 'Or pick one. It shows on every player’s map right away: rain, storms and fog over the map, and purple fog turns the fog purple.'));
     const grid = el('div', 'wx-grid');
     WEATHER.forEach(([k, [lo, hi], name, effect]) => {
