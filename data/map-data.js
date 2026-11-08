@@ -15,7 +15,7 @@ window.MAP_DATA = {
       "name": "Camp Harmony",
       "description": "",
       "color": "#17665f",
-      "font": "Cinzel",
+      "font": "IM Fell English",
       "size": "l",
       "coast": true,
       "rough": true,
@@ -5340,7 +5340,7 @@ window.MAP_DATA = {
       "name": "The Stronghold",
       "description": "",
       "color": "#591313",
-      "font": "Cinzel",
+      "font": "IM Fell English",
       "size": "l",
       "coast": true,
       "rough": true,
@@ -11829,7 +11829,7 @@ window.MAP_DATA = {
       "name": "New region",
       "description": "",
       "color": "#000059",
-      "font": "Cinzel",
+      "font": "IM Fell English",
       "size": "l",
       "coast": true,
       "rough": true,
@@ -14118,8 +14118,8 @@ window.MAP_DATA = {
         ]
       ],
       "labelAt": [
-        -79.789717,
-        32.788367
+        -79.783684,
+        32.791078
       ],
       "labelScale": 0.9,
       "labelAngle": -27,
@@ -14364,7 +14364,7 @@ window.MAP_DATA = {
       "name": "New region",
       "description": "",
       "color": "#804000",
-      "font": "Cinzel",
+      "font": "IM Fell English",
       "size": "l",
       "coast": true,
       "rough": true,
@@ -15145,7 +15145,7 @@ window.MAP_DATA = {
       "name": "New region",
       "description": "",
       "color": "#004000",
-      "font": "Cinzel",
+      "font": "IM Fell English",
       "size": "l",
       "coast": true,
       "rough": true,
@@ -20545,7 +20545,7 @@ window.MAP_DATA = {
     },
     {
       "id": "pmw6za6wvuk79",
-      "name": "Wind_Calm",
+      "name": "Wind_Calm_Event",
       "audio": "sounds/pmw6za6wvuk79-mw6zvpnp1.mp3",
       "loop": true,
       "cat": "ambience",
@@ -20553,7 +20553,7 @@ window.MAP_DATA = {
     },
     {
       "id": "pmw6zb0narbqv",
-      "name": "Wind_Howling",
+      "name": "Wind_Howling_Event",
       "audio": "sounds/pmw6zb0narbqv-mw6zvpnp2.mp3",
       "loop": true,
       "cat": "ambience",
@@ -20646,6 +20646,86 @@ window.MAP_DATA = {
       "loop": false,
       "cat": "physical",
       "volume": 0.8
+    },
+    {
+      "id": "pmw7fxzs4zfhb",
+      "name": "Rain_Event",
+      "audio": "sounds/pmw7fxzs4zfhb-mw7g16ty0.mp3",
+      "loop": true,
+      "volume": 0.8,
+      "cat": "ambience"
+    },
+    {
+      "id": "pmw7fy1x488k7",
+      "name": "Thunderstorm_Event",
+      "audio": "sounds/pmw7fy1x488k7-mw7g16u31.mp3",
+      "loop": true,
+      "volume": 0.8,
+      "cat": "ambience"
+    },
+    {
+      "id": "pmw7fz1cb19qp",
+      "name": "Shotgun_Shot1",
+      "audio": "sounds/pmw7fz1cb19qp-mw7g16u32.mp3",
+      "loop": false,
+      "volume": 0.8,
+      "cat": "physical"
+    },
+    {
+      "id": "pmw7fzh53bgja",
+      "name": "Rifle_Shot_1",
+      "audio": "sounds/pmw7fzh53bgja-mw7g16u33.mp3",
+      "loop": false,
+      "volume": 0.8,
+      "cat": "physical"
+    },
+    {
+      "id": "pmw7fzh54wxx4",
+      "name": "Rifle_Shot_2",
+      "audio": "sounds/pmw7fzh54wxx4-mw7g16u34.mp3",
+      "loop": false,
+      "volume": 0.8,
+      "cat": "physical"
+    },
+    {
+      "id": "pmw7fzh55ymsu",
+      "name": "Machine_Gun_Shot_1",
+      "audio": "sounds/pmw7fzh55ymsu-mw7g16u35.mp3",
+      "loop": false,
+      "volume": 0.8,
+      "cat": "physical"
+    },
+    {
+      "id": "pmw7fzh565qlr",
+      "name": "Pistol_Shot_1",
+      "audio": "sounds/pmw7fzh565qlr-mw7g16u36.mp3",
+      "loop": false,
+      "volume": 0.8,
+      "cat": "physical"
+    },
+    {
+      "id": "pmw7fzh59da7p",
+      "name": "Revolver_Shot_1",
+      "audio": "sounds/pmw7fzh59da7p-mw7g16u37.mp3",
+      "loop": false,
+      "volume": 0.8,
+      "cat": "physical"
+    },
+    {
+      "id": "pmw7fzh593vjj",
+      "name": "Distant_Shots_1",
+      "audio": "sounds/pmw7fzh593vjj-mw7g16u38.mp3",
+      "loop": false,
+      "volume": 0.8,
+      "cat": "physical"
+    },
+    {
+      "id": "pmw7fzh5alprs",
+      "name": "Distant_Shots_2",
+      "audio": "sounds/pmw7fzh5alprs-mw7g16u39.mp3",
+      "loop": false,
+      "volume": 0.8,
+      "cat": "physical"
     }
   ],
   "fire": [
