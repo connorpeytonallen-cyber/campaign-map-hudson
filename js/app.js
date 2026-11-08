@@ -450,6 +450,10 @@
       chance: Math.round(rng(ev && ev.chance, 0, 100, 40)),
       maxPerDay: Math.round(rng(ev && ev.maxPerDay, 0, 6, 2))
     };
+    // Weather sounds: which sound each weather starts. Missing = pick one by name, 'none' = silent.
+    const ws = d.weatherSounds && typeof d.weatherSounds === 'object' ? d.weatherSounds : {};
+    out.weatherSounds = { auto: ws.auto !== false, map: {} };
+    if (ws.map && typeof ws.map === 'object') Object.keys(ws.map).forEach((k) => { if (typeof ws.map[k] === 'string') out.weatherSounds.map[k] = ws.map[k]; });
     return out;
   }
   // A region's coast-traced outline: [polygon[ring[[lng,lat]...]]], or null.
@@ -1127,7 +1131,7 @@
   function mysterySvg(w, h) {
     return `<svg viewBox="0 0 30 40" width="${w}" height="${h}" aria-hidden="true">` +
       `<path d="M15 1.5C7.5 1.5 1.5 7.4 1.5 14.8 1.5 24.8 15 38.5 15 38.5S28.5 24.8 28.5 14.8C28.5 7.4 22.5 1.5 15 1.5z" fill="#2a2a30" stroke="rgba(0,0,0,.7)" stroke-width="1.5"/>` +
-      `<text x="15" y="19.5" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="9.5" fill="#e8e2d0" letter-spacing="-.3">???</text></svg>`;
+      `<text x="15" y="19.5" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="9.5" fill="#e8e2d0">???</text></svg>`;
   }
 
   function addMarker(loc) {
@@ -5341,11 +5345,45 @@
   let weather = { k: 'clear', ts: 0 };
   const wxOf = (k) => WEATHER.find((w) => w[0] === k) || WEATHER[0];
   const cleanWeather = (w) => (w && WEATHER.some((x) => x[0] === w.k) ? { k: w.k, ts: num(w.ts) || 0, roll: num(w.roll) || null, auto: !!w.auto } : null);
-  function setWeather(k, roll) {
+  // Weather sounds: each weather can start an ambience loop for everyone, and stops the last one.
+  const WX_SOUND_GUESS = {
+    clear: [/calm/i],
+    overcast: [/howl/i, /wind(?!.*calm)/i],
+    drizzle: [/drizzle/i, /rain/i],
+    rain: [/heavy.*rain/i, /rain/i],
+    storm: [/thunder/i, /storm/i],
+    fog: [/fog/i],
+    purple: [/purple/i]
+  };
+  function guessWeatherSound(k) {
+    const pool = [...data.sounds.filter((s) => s.cat === 'ambience'), ...data.sounds.filter((s) => s.cat !== 'ambience')];
+    for (const re of WX_SOUND_GUESS[k] || []) { const s = pool.find((x) => re.test(x.name)); if (s) return s; }
+    return null;
+  }
+  function weatherSound(k) {
+    const id = data.weatherSounds.map[k];
+    if (id === 'none') return null;
+    if (id) return data.sounds.find((s) => s.id === id) || null;
+    return guessWeatherSound(k);
+  }
+  let wxSoundId = '';
+  function playWeatherSound(k) {
+    if (!editing || !data.weatherSounds.auto) return;
+    const s = weatherSound(k);
+    if (wxSoundId && (!s || s.id !== wxSoundId) && activeLoopIds.has(wxSoundId)) { const old = soundById(wxSoundId); if (old) dmStop(old); }
+    wxSoundId = s ? s.id : '';
+    if (!s || activeLoopIds.has(s.id)) return;
+    const keep = soundTarget;
+    soundTarget = ''; // weather is for everyone
+    dmPlay(s);
+    soundTarget = keep;
+  }
+  function setWeather(k, roll, quiet) {
     weather = { k, ts: Date.now(), roll: roll || null, auto: !!(weather && weather.auto) };
     lsSet(WX_KEY(), weather);
     if (relay && relay.connected) relay.publish(`${ROOM}/weather`, JSON.stringify(weather), { retain: true });
     else toast('Can’t reach the live service right now, so players see the new weather once it reconnects.', 'warn', 6000);
+    if (!quiet) playWeatherSound(k);
     applyWeather();
     if (currentView === 'events' && eventsTab === 'weather') showEvents();
   }
@@ -5369,7 +5407,7 @@
     setTimeout(() => {
       if (!editing || weather.ts) return;
       const saved = cleanWeather(lsGet(WX_KEY(), null));
-      if (saved) { weather = saved; setWeather(saved.k, saved.roll); }
+      if (saved) { weather = saved; setWeather(saved.k, saved.roll, true); }
     }, 2600);
   }
   // A new in-game day can roll fresh weather.
@@ -5401,6 +5439,27 @@
     acb.onchange = () => { weather.auto = acb.checked; lsSet(WX_KEY(), weather); };
     ac.appendChild(acb); ac.appendChild(document.createTextNode(' Roll new weather each in-game day (at 8 AM)'));
     b.appendChild(ac);
+    // Weather sounds
+    const ws = data.weatherSounds;
+    b.appendChild(el('div', 'sub-h', 'Weather sounds'));
+    const sc = el('label', 'check'), scb = el('input');
+    scb.type = 'checkbox'; scb.checked = ws.auto;
+    scb.onchange = () => { ws.auto = scb.checked; changed(); };
+    sc.appendChild(scb); sc.appendChild(document.createTextNode(' Start the matching sound for everyone when the weather changes'));
+    b.appendChild(sc);
+    b.appendChild(el('p', 'tip', 'The old weather’s sound stops when the new one starts. “Match by name” looks in your sounds (Ambience first) for rain, thunder, wind howling or calm.'));
+    const opts = [...data.sounds.filter((s) => s.cat === 'ambience'), ...data.sounds.filter((s) => s.cat !== 'ambience')];
+    WEATHER.forEach(([k, , name]) => {
+      const sel = el('select');
+      const guess = guessWeatherSound(k);
+      const add = (v, label) => { const o = el('option', null, label); o.value = v; sel.appendChild(o); };
+      add('', 'Match by name' + (guess ? ` (${guess.name})` : ' (none found)'));
+      add('none', 'No sound');
+      opts.forEach((s) => add(s.id, s.name + (s.loop ? '' : ' (plays once)')));
+      sel.value = ws.map[k] && (ws.map[k] === 'none' || data.sounds.some((s) => s.id === ws.map[k])) ? ws.map[k] : '';
+      sel.onchange = () => { if (sel.value) ws.map[k] = sel.value; else delete ws.map[k]; changed(); };
+      b.appendChild(field(name, sel));
+    });
   }
 
   // Drawing the weather over the map (players and DM). Rain is a canvas of streaks; fog and gloom are washes.
