@@ -20726,6 +20726,14 @@ window.MAP_DATA = {
       "loop": false,
       "volume": 0.8,
       "cat": "physical"
+    },
+    {
+      "id": "pmw7g2axid7pl",
+      "name": "Forrest_Fire",
+      "audio": "sounds/pmw7g2axid7pl-mw7g2oai0.mp3",
+      "loop": true,
+      "volume": 0.8,
+      "cat": "ambience"
     }
   ],
   "fire": [
