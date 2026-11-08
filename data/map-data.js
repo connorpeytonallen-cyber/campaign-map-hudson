@@ -11808,7 +11808,7 @@ window.MAP_DATA = {
     },
     {
       "id": "pmw7ecambddak",
-      "name": "New region",
+      "name": "Breakwater",
       "description": "",
       "color": "#000059",
       "font": "IM Fell English",
@@ -14343,7 +14343,7 @@ window.MAP_DATA = {
     },
     {
       "id": "pmw7ffrqh5w5n",
-      "name": "New region",
+      "name": "Shell Point",
       "description": "",
       "color": "#804000",
       "font": "IM Fell English",
@@ -15124,7 +15124,7 @@ window.MAP_DATA = {
     },
     {
       "id": "pmw7fkg5qjtr0",
-      "name": "New region",
+      "name": "Holloway",
       "description": "",
       "color": "#004000",
       "font": "IM Fell English",
@@ -15845,7 +15845,7 @@ window.MAP_DATA = {
       "id": "example-bastion",
       "kind": "place",
       "name": "Kit's Boat (Docked)",
-      "description": "",
+      "description": "“Kit’s boat rides low at the dock, her hull scarred by twenty seasons of ice and harpoon line. Coils of rope and rusted irons crowd the deck, and the cabin still smells of whale oil and cigar smoke. It’s the closest thing the party has to a home.”",
       "lng": -79.889936,
       "lat": 32.836839,
       "titleFont": "IM Fell English",
@@ -15858,6 +15858,7 @@ window.MAP_DATA = {
       "scale": 1,
       "throughFog": false,
       "mystery": false,
+      "loot": "",
       "shops": [],
       "npcs": []
     },
@@ -15878,6 +15879,7 @@ window.MAP_DATA = {
       "scale": 0.7,
       "throughFog": false,
       "mystery": false,
+      "loot": "",
       "shops": [
         {
           "id": "pmw4hi82pbhet",
@@ -15964,6 +15966,7 @@ window.MAP_DATA = {
       "scale": 1.5,
       "throughFog": false,
       "mystery": false,
+      "loot": "",
       "shops": [],
       "npcs": []
     },
@@ -15984,6 +15987,7 @@ window.MAP_DATA = {
       "scale": 0.7,
       "throughFog": false,
       "mystery": false,
+      "loot": "-$12 (front desk)\n-2x Rations (vending machine, pried open)\n-2x Wool blankets\n-3x Pistol rounds\n-1x Bandage (1d4)\n-1x Battery radio (from the one closed room; it picks up a voice at 3 a.m.)",
       "shops": [],
       "npcs": []
     },
@@ -16004,6 +16008,7 @@ window.MAP_DATA = {
       "scale": 1,
       "throughFog": false,
       "mystery": false,
+      "loot": "",
       "shops": [],
       "npcs": []
     },
@@ -16024,6 +16029,7 @@ window.MAP_DATA = {
       "scale": 1.5,
       "throughFog": false,
       "mystery": false,
+      "loot": "",
       "shops": [],
       "npcs": []
     },
@@ -16044,26 +16050,28 @@ window.MAP_DATA = {
       "scale": 1,
       "throughFog": true,
       "mystery": false,
+      "loot": "",
       "shops": [],
       "npcs": []
     },
     {
       "id": "pmw7zrrg53fl5",
       "kind": "place",
-      "name": "",
-      "description": "",
+      "name": "The Army Truck",
+      "description": "“An army truck sits upright in the ditch, patched together: a door wired on from another car, a mismatched tire, plywood over the windshield. Fresh oil darkens the dirt under the engine. Someone is getting it running.”",
       "lng": -79.847258,
       "lat": 32.824837,
       "titleFont": "",
       "bodyFont": "",
       "textSize": "",
-      "color": "",
+      "color": "#d64545",
       "image": "",
-      "symbol": "",
+      "symbol": "shield",
       "symbolColor": "",
       "scale": 1,
       "throughFog": false,
       "mystery": true,
+      "loot": "-2x Rations\n-4x Rifle rounds\n-1x Jerrycan of fuel (1 trip)\n-2x Motor oil\n-1x Toolbox (advantage on repairs)",
       "shops": [],
       "npcs": []
     },
@@ -16084,6 +16092,7 @@ window.MAP_DATA = {
       "scale": 1,
       "throughFog": false,
       "mystery": true,
+      "loot": "-3x Rations (smoked fish)\n-1x Deep-sea rod (once a day, DC 12 Fortune for 1 ration; Kit has advantage)\n-1x Rope (50 ft)\n-$8",
       "shops": [],
       "npcs": []
     },
@@ -16104,6 +16113,7 @@ window.MAP_DATA = {
       "scale": 1,
       "throughFog": false,
       "mystery": true,
+      "loot": "-$25\n-1x Bone saw (1d6)\n-1x Guest list from the Mayor's party\n-3x Rations (Pemberton shares them if the party brings him a body)\n-1x Bandage (1d4)\n-1x Jar of embalming fluid (more at $10 a jar from Pemberton)",
       "shops": [],
       "npcs": []
     },
@@ -16124,6 +16134,7 @@ window.MAP_DATA = {
       "scale": 1,
       "throughFog": false,
       "mystery": false,
+      "loot": "-$15\n-1x Pocket knife (1d6)\n-1x Lighter\n-2x Rations\n-3x Rifle rounds",
       "shops": [],
       "npcs": []
     },
@@ -16144,6 +16155,7 @@ window.MAP_DATA = {
       "scale": 1,
       "throughFog": false,
       "mystery": true,
+      "loot": "-$14 (fare tin and passengers' pockets)\n-1x Ration (a lunch pail)\n-2x Pistol rounds",
       "shops": [],
       "npcs": []
     },
@@ -16164,6 +16176,7 @@ window.MAP_DATA = {
       "scale": 1,
       "throughFog": false,
       "mystery": true,
+      "loot": "-1x Ration each (hot meal for an hour's work, +10 sanity)\n-3x Rations (pantry)\n-1x Sack of coffee\n-1x Bandage (1d4)\n-$12",
       "shops": [],
       "npcs": []
     },
@@ -16184,6 +16197,7 @@ window.MAP_DATA = {
       "scale": 1,
       "throughFog": false,
       "mystery": true,
+      "loot": "-3x Jugs of moonshine (+10 sanity a drink, or 1 jug runs the car for 1 trip)\n-1x Skiff\n-3x Rations (smoked eel, if Boone likes them)\n-$10",
       "shops": [],
       "npcs": []
     },
@@ -16204,6 +16218,7 @@ window.MAP_DATA = {
       "scale": 1,
       "throughFog": false,
       "mystery": true,
+      "loot": "-3x Rations (cellar stash)\n-$30 (cellar stash)\n-6x Pistol rounds (cellar stash)\n-For sale: pocket watch, brass knuckles (1d6, +1 to hit), 2x lamp oil",
       "shops": [],
       "npcs": []
     },
@@ -16224,6 +16239,7 @@ window.MAP_DATA = {
       "scale": 1,
       "throughFog": false,
       "mystery": true,
+      "loot": "-$16\n-2x Wedding rings ($5 each at Dot's)\n-2x Bandages (1d4)\n-4x Pistol rounds\n-1x Ration",
       "shops": [],
       "npcs": []
     },
@@ -16244,6 +16260,7 @@ window.MAP_DATA = {
       "scale": 1,
       "throughFog": false,
       "mystery": true,
+      "loot": "-6x Rations\n-$40\n-1x Navy revolver (1d8)\n-6x Pistol rounds\n-1x Army medkit (2 uses, 1d6+2)\n-1x Rope (50 ft)\n-1x Flare gun\n-2x Flares\n-1x Coastal charts",
       "shops": [],
       "npcs": []
     },
@@ -16264,6 +16281,7 @@ window.MAP_DATA = {
       "scale": 1,
       "throughFog": false,
       "mystery": true,
+      "loot": "-3x Rations\n-2x Lamp oil\n-1x Binoculars\n-4x Rifle rounds",
       "shops": [],
       "npcs": []
     },
@@ -16284,8 +16302,332 @@ window.MAP_DATA = {
       "scale": 1,
       "throughFog": false,
       "mystery": true,
+      "loot": "-$9\n-1x Pocket watch ($8 at Dot's)\n-1x Pair of good boots\n-3x Pistol rounds\n-1x Ration (in a coat pocket)",
       "shops": [],
       "npcs": []
+    },
+    {
+      "id": "pmw814krwvcue",
+      "kind": "settlement",
+      "name": "Holloway",
+      "description": "“A cluster of farmhouses and barns around the last good field on this side of the marsh. Rows of beans and corn are guarded by men with deer rifles, and every fence post has a deed number painted on it. They have food, and they know it.”",
+      "lng": -79.86111,
+      "lat": 32.762102,
+      "titleFont": "",
+      "bodyFont": "",
+      "textSize": "",
+      "color": "",
+      "image": "",
+      "symbol": "",
+      "symbolColor": "",
+      "scale": 1,
+      "throughFog": false,
+      "mystery": false,
+      "loot": "",
+      "shops": [
+        {
+          "id": "pmwqw4nov46a8",
+          "name": "The Root Cellar",
+          "keeper": "June Holloway",
+          "description": "“A cool cellar under the main house, shelves half empty. June keeps the ledger in her head.”",
+          "items": "Inventory:\n-Rations $14 each, 4x available\n-Rifle rounds $9 each, 3x available\n-Lamp oil $12\n-Buys pistol and rifle rounds at full Camp Harmony price. They need them for the war.",
+          "image": ""
+        }
+      ],
+      "npcs": [
+        {
+          "id": "pmwbc7x0e27au",
+          "name": "Eli Holloway",
+          "role": "Landowner",
+          "description": "“Gray suit gone shiny at the knees, deed folded in his breast pocket. Polite, stubborn, and certain the law is still on his side.”",
+          "image": "",
+          "hidden": false
+        },
+        {
+          "id": "pmww6by6kjc2d",
+          "name": "June Holloway",
+          "role": "Trader",
+          "description": "“Sun-browned and tired, dirt under her nails. She does the real work and the real bargaining.”",
+          "image": "",
+          "hidden": false
+        },
+        {
+          "id": "pmwa3k32aucbe",
+          "name": "Cal Brody",
+          "role": "Hired Gun",
+          "description": "“Lanky and grinning, a deer rifle over one shoulder. Paid in corn, loyal to whoever’s feeding him.”",
+          "image": "",
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "id": "pmw814te2qx48",
+      "kind": "settlement",
+      "name": "Shell Point",
+      "description": "“Stilt houses and oyster sheds lean over the tide flats, joined by plank walkways. Strings of shells and bones clatter over every door, and the fishermen mend their nets with knives close at hand. They’re friendly to strangers, and they watch them the whole time.”",
+      "lng": -79.827937,
+      "lat": 32.764136,
+      "titleFont": "",
+      "bodyFont": "",
+      "textSize": "",
+      "color": "",
+      "image": "",
+      "symbol": "",
+      "symbolColor": "",
+      "scale": 1,
+      "throughFog": false,
+      "mystery": false,
+      "loot": "",
+      "shops": [
+        {
+          "id": "pmwzxmwu92mdq",
+          "name": "The Oyster Shed",
+          "keeper": "Nate Duval",
+          "description": "“A shed on stilts, its floor slick with brine. Smoked fish hangs from the rafters in strings.”",
+          "items": "Inventory:\n-Smoked fish rations $12 each, 5x available\n-Fishing net (once a day, DC 11 Fortune for 1 ration) $25\n-Harpoon (1d8, can be thrown) $35\n-Buys pistol and rifle rounds at full Camp Harmony price",
+          "image": ""
+        },
+        {
+          "id": "pmwiurcbpibys",
+          "name": "Marsh Passage",
+          "keeper": "Lissie Duval",
+          "description": "“Lissie, a pole and a flat-bottomed boat.”",
+          "items": "Services:\n-Safe passage through the marsh: 1 ration a head\n-The path to the lighthouse causeway, timed to the tide: $10",
+          "image": ""
+        }
+      ],
+      "npcs": [
+        {
+          "id": "pmwjx7ydwalsq",
+          "name": "Mother Adair",
+          "role": "Elder",
+          "description": "“Ancient and tiny, wrapped in a fishnet shawl. She reads the tide like scripture, and lately it has been saying things that frighten her.”",
+          "image": "",
+          "hidden": false
+        },
+        {
+          "id": "pmwasty25qkm8",
+          "name": "Nate Duval",
+          "role": "Fisherman",
+          "description": "“Broad, quiet and missing two fingers. Trades fish for anything that shoots.”",
+          "image": "",
+          "hidden": false
+        },
+        {
+          "id": "pmwpazirm5kjd",
+          "name": "Lissie Duval",
+          "role": "Marsh Guide",
+          "description": "“Quick, sharp-eyed and barefoot in the mud. She knows every safe path through the marsh, and she charges for it.”",
+          "image": "",
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "id": "pmw8159177p7y",
+      "kind": "settlement",
+      "name": "The Picket",
+      "description": "“A single oyster shed on the causeway, sandbagged on the Holloway side and flying a scrap of orange sail. Shell Point men sleep here in shifts with a shotgun and a bell. Whoever holds it holds the only dry road onto the spit.”",
+      "lng": -79.83829,
+      "lat": 32.765232,
+      "titleFont": "",
+      "bodyFont": "",
+      "textSize": "",
+      "color": "",
+      "image": "",
+      "symbol": "",
+      "symbolColor": "",
+      "scale": 1,
+      "throughFog": false,
+      "mystery": false,
+      "loot": "-1x Holloway county deed (under the floorboards)\n-1x Ration\n-2x Shotgun shells",
+      "shops": [
+        {
+          "id": "pmwl88mdktq6b",
+          "name": "Gus’s Trade",
+          "keeper": "Gus Tibbs",
+          "description": "“Gus, a crate and a bucket of fish.”",
+          "items": "Trades:\n-1 smoked fish ration for 2 pistol rounds",
+          "image": ""
+        }
+      ],
+      "npcs": [
+        {
+          "id": "pmwljxjesm05w",
+          "name": "Gus Tibbs",
+          "role": "Watchman",
+          "description": "“Old and half-deaf, a shotgun across his knees. He’ll ring the bell at anything.”",
+          "image": "",
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "id": "pmw815gu8fp8t",
+      "kind": "settlement",
+      "name": "Breakwater",
+      "description": "“A town of sandbagged streets behind the marsh, under the shadow of Fort Douglas. Searchlights sweep the water at night, sentries check papers at every corner, and the street lamps burn on a schedule. It’s the cleanest, safest place left on the coast, and nobody here lets you forget who keeps it that way.”",
+      "lng": -79.787506,
+      "lat": 32.788533,
+      "titleFont": "",
+      "bodyFont": "",
+      "textSize": "",
+      "color": "",
+      "image": "",
+      "symbol": "",
+      "symbolColor": "",
+      "scale": 1,
+      "throughFog": false,
+      "mystery": false,
+      "loot": "",
+      "shops": [
+        {
+          "id": "pmwo6p5p8fcpj",
+          "name": "The Quartermaster",
+          "keeper": "Bea Kessler",
+          "description": "“A sandbagged warehouse with a counter of ammunition crates. Every sale is written in triplicate. Outsiders without papers pay half again.”",
+          "items": "Inventory:\n-Rations $12 each, 10x available\n-Pistol (1d8) $60\n-Bolt rifle (1d10) $110\n-Pistol rounds $5 each, rifle rounds $7 each\n-Hollowpoint pistol rounds $9 each (better against unarmored targets)\n-Armor-piercing rifle rounds $12 each (better against armored targets)\n-Army helmet (+1 AC) $40\n-Gas mask (advantage on Tolerance checks against smog and fog) $45\n-Bandages (1d4) $15\n-Army medkit (2 uses, 1d6+2 each) $60\n-Fuel, enough for one trip, $45\n-Without papers: every price +50%",
+          "image": ""
+        },
+        {
+          "id": "pmw8vvseauddf",
+          "name": "The Infirmary",
+          "keeper": "Dr. Ines Ferreira",
+          "description": "“A school gymnasium full of cots in perfect rows. It smells of carbolic and boiled linen.”",
+          "items": "Services:\n-Recovery: 2d6+2 for $25, or to full health for $45\n-Fear or Hunger: restores 25 sanity or 25 hunger for $35",
+          "image": ""
+        },
+        {
+          "id": "pmw734yda63ga",
+          "name": "The Mess Hall",
+          "keeper": "Sal Moreno",
+          "description": "“A church hall with long tables and one enormous stove. The coffee is real.”",
+          "items": "Services:\n-Hot meal $8 (counts as 1 ration, +5 sanity)\n-Coffee $2 (+5 sanity, once a day)",
+          "image": ""
+        }
+      ],
+      "npcs": [
+        {
+          "id": "pmwkgclfzmqli",
+          "name": "Colonel Aldous Wray",
+          "role": "Commander",
+          "description": "“Upright and gray at the temples, uniform pressed every morning. Speaks in orders even when he’s being kind.”",
+          "image": "",
+          "hidden": false
+        },
+        {
+          "id": "pmwcu2a7ed4j7",
+          "name": "Bea Kessler",
+          "role": "Quartermaster",
+          "description": "“Thick glasses and a clipboard she never puts down. Everything has a form, and every form has a price.”",
+          "image": "",
+          "hidden": false
+        },
+        {
+          "id": "pmwafb5k8ols5",
+          "name": "Sergeant Mack Dunleavy",
+          "role": "Gate Sergeant",
+          "description": "“Broad, sunburned and bored, with a rubber stamp on a string. Your papers are either in order or they aren’t.”",
+          "image": "",
+          "hidden": false
+        },
+        {
+          "id": "pmwj1manh32oe",
+          "name": "Dr. Ines Ferreira",
+          "role": "Army Surgeon",
+          "description": "“Brisk and spotless, sleeves rolled to the elbow. She fixes what she can and writes down everything she can’t.”",
+          "image": "",
+          "hidden": false
+        },
+        {
+          "id": "pmwf4uxrjzdgu",
+          "name": "Sal Moreno",
+          "role": "Mess Cook",
+          "description": "“Round, loud and generous with the ladle. The only man in Breakwater who doesn’t ask for papers.”",
+          "image": "",
+          "hidden": false
+        },
+        {
+          "id": "pmwpf62e9z3kc",
+          "name": "Private Tom Abel",
+          "role": "Depot Guard",
+          "description": "“Young and jumpy, posted on the depot road. He’s seen something come out of the Armed Fox Depot at night, and nobody will believe him.”",
+          "image": "",
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "id": "pmw815muadruh",
+      "kind": "settlement",
+      "name": "Precinct Seven",
+      "description": "“A brick police station and the block around it, walled in with cars, sandbags and barbed wire. A sign over the gate reads PRECINCT SEVEN, LAW STILL HOLDS. Men in patched blue uniforms walk the walls with rifles, and a gallows stands in the yard. It has been used.”",
+      "lng": -79.803532,
+      "lat": 32.824755,
+      "titleFont": "",
+      "bodyFont": "",
+      "textSize": "",
+      "color": "",
+      "image": "",
+      "symbol": "",
+      "symbolColor": "",
+      "scale": 1,
+      "throughFog": false,
+      "mystery": false,
+      "loot": "",
+      "shops": [
+        {
+          "id": "pmw5pne6r8ftk",
+          "name": "The Armory",
+          "keeper": "Sergeant Della Price",
+          "description": "“The old evidence room, racks of confiscated guns behind a wire cage. Price takes food, medicine and ammunition. Cash only at double the value.”",
+          "items": "Inventory (paid in rations):\n-Police revolver (1d8): 4 rations\n-Police baton (1d6): 1 ration\n-Bolt rifle (1d10): 7 rations\n-Pump shotgun (2d6 close range): 8 rations\n-Pistol rounds: 3 for 1 ration\n-Rifle rounds: 2 for 1 ration\n-Shotgun shells: 2 for 1 ration\n-Armor-piercing rifle rounds: 1 for 1 ration\n-Police vest (+2 AC, -1 Speed): 10 rations\n-Bandages or a medkit count as 2 rations in trade",
+          "image": ""
+        },
+        {
+          "id": "pmw9cjxbcdtw4",
+          "name": "The Bounty Board",
+          "keeper": "Officer Lyle Banks",
+          "description": "“A corkboard by the front desk, covered in names, sketches and prices.”",
+          "items": "Bounties:\n-5 Meeklain skulls: 1 ration\n-Hup'ehye teeth (from the maw): $15 each\n-A live looter, delivered: 2 rations\n-Information on anyone who was at the Mayor's Estate the night of the party: $25",
+          "image": ""
+        }
+      ],
+      "npcs": [
+        {
+          "id": "pmwryqjt33y5s",
+          "name": "Chief Jamison Smith",
+          "role": "Chief of Police",
+          "description": "“Big, red-faced and hoarse, with a polished badge on a filthy coat. He used to drink too much at parties. Now he doesn’t drink at all, and he never forgets a face.”",
+          "image": "",
+          "hidden": false
+        },
+        {
+          "id": "pmwlbms7xt2te",
+          "name": "Sergeant Della Price",
+          "role": "Armorer",
+          "description": "“Wiry, with grease to the elbows and a cigarette she never lights. She’ll sell you a gun, but she wants to be paid in food.”",
+          "image": "",
+          "hidden": false
+        },
+        {
+          "id": "pmwwxdzfbuf12",
+          "name": "Officer Lyle Banks",
+          "role": "Survey Team 3",
+          "description": "“Thin and polite, notebook always out. He’s missing his badge and pretends he isn’t.”",
+          "image": "",
+          "hidden": false
+        },
+        {
+          "id": "pmwmdqzfrd3my",
+          "name": "Rook",
+          "role": "Prisoner",
+          "description": "“A looter in the holding cells, waiting to hang. Swears the Chief hangs anyone who’s seen what’s in the basement.”",
+          "image": "",
+          "hidden": true
+        }
+      ]
     }
   ],
   "quests": [
@@ -16323,6 +16665,138 @@ window.MAP_DATA = {
       "lng": -79.879929,
       "lat": 32.795028,
       "revealed": true,
+      "scale": 1
+    },
+    {
+      "id": "pmwu64fd0bpsx",
+      "title": "Papers, Please",
+      "description": "“Outsiders pay half again for everything in Breakwater and can be turned out at sundown. Papers fix that. Work three days on the seawall, or find a resident willing to vouch for you.”\nReward: residency papers (normal prices, free movement).",
+      "status": "active",
+      "giver": "Sergeant Mack Dunleavy",
+      "locationId": "pmw815gu8fp8t",
+      "lng": -79.78350599999999,
+      "lat": 32.791533,
+      "revealed": false,
+      "scale": 1
+    },
+    {
+      "id": "pmwb1foh3wl5s",
+      "title": "Lights at the Depot",
+      "description": "“Something walks out of the Armed Fox Depot at night and goes back in before dawn. Abel wants someone to see it with him, without the Colonel finding out.”\nReward: $40, and the truth.",
+      "status": "active",
+      "giver": "Private Tom Abel",
+      "locationId": "pmw815gu8fp8t",
+      "lng": -79.781506,
+      "lat": 32.785533,
+      "revealed": false,
+      "scale": 1
+    },
+    {
+      "id": "pmwqkcdpd3h31",
+      "title": "The Causeway Question",
+      "description": "“Holloway and Shell Point are fighting over the causeway, and Breakwater needs Holloway’s grain. The Colonel wants the dispute settled quietly, in Holloway’s favor.”\nReward: $60, 4 rations and residency papers.",
+      "status": "active",
+      "giver": "Colonel Aldous Wray",
+      "locationId": "pmw815gu8fp8t",
+      "lng": -79.79250599999999,
+      "lat": 32.791533,
+      "revealed": false,
+      "scale": 1
+    },
+    {
+      "id": "pmw9p68s1adsf",
+      "title": "Badge 114",
+      "description": "“Banks lost his badge on the last survey, near the old army truck. If the Chief finds out, he’ll be off the walls. Bring it back quietly.”\nReward: $20 and a favor from Banks.",
+      "status": "active",
+      "giver": "Officer Lyle Banks",
+      "locationId": "pmw815muadruh",
+      "lng": -79.800532,
+      "lat": 32.827755,
+      "revealed": false,
+      "scale": 1
+    },
+    {
+      "id": "pmwob3kxoinr0",
+      "title": "The Missing Part",
+      "description": "“The army truck by the east road is one fuel pump from running. The Chief wants one, from any wreck in the slum, and he wants it before the soldiers on the spit find the truck first.”\nReward: a police revolver and 6 rounds, or a seat on the truck’s first run.",
+      "status": "active",
+      "giver": "Chief Jamison Smith",
+      "locationId": "pmw815muadruh",
+      "lng": -79.80753200000001,
+      "lat": 32.827755,
+      "revealed": false,
+      "scale": 1
+    },
+    {
+      "id": "pmw3i3k28cln4",
+      "title": "Who Shot the Mayor",
+      "description": "“The Chief is building a case. He wants the names of everyone who was in the Mayor’s office the night of the party, and he already has one: Edwin Morris.”\nReward: the Chief’s trust, and access to the basement.",
+      "status": "active",
+      "giver": "Chief Jamison Smith",
+      "locationId": "pmw815muadruh",
+      "lng": -79.799532,
+      "lat": 32.821755,
+      "revealed": false,
+      "scale": 1
+    },
+    {
+      "id": "pmwr55q89in24",
+      "title": "The Deed Box",
+      "description": "“Shell Point raiders took the Holloway family’s county deed in the night. Eli wants it back, and he’s sure it’s somewhere on the causeway.”\nReward: 4 rations and Cal’s spare deer rifle (1d10) with 3 rounds.",
+      "status": "active",
+      "giver": "Eli Holloway",
+      "locationId": "pmw814krwvcue",
+      "lng": -79.85811,
+      "lat": 32.765102,
+      "revealed": false,
+      "scale": 1
+    },
+    {
+      "id": "pmwqypmf0yao0",
+      "title": "Burn the Boats",
+      "description": "“Cal will pay quietly to have Shell Point’s boats burned. No boats, no fishing, no fight.”\nReward: $25. Shell Point will never open its doors to the party again.",
+      "status": "active",
+      "giver": "Cal Brody",
+      "locationId": "pmw814krwvcue",
+      "lng": -79.86411,
+      "lat": 32.765102,
+      "revealed": false,
+      "scale": 1
+    },
+    {
+      "id": "pmwyyvkko8nmr",
+      "title": "What the Tide Brings",
+      "description": "“The tide has been bringing pale things up on the lighthouse rock, and old Silas hasn’t rowed in for supplies in two weeks. Mother Adair wants someone to check on him.”\nReward: Lissie’s marsh passage free from now on, and 3 rations.",
+      "status": "active",
+      "giver": "Mother Adair",
+      "locationId": "pmw814te2qx48",
+      "lng": -79.824937,
+      "lat": 32.761136,
+      "revealed": false,
+      "scale": 1
+    },
+    {
+      "id": "pmwmzj9sgvjy3",
+      "title": "Skulls in the Sheds",
+      "description": "“Something has been digging up Shell Point’s dead from under the shell mounds and carrying off the skulls. The tracks lead north, toward a storm drain under the road.”\nReward: 4 rations and a fishing net.",
+      "status": "active",
+      "giver": "Nate Duval",
+      "locationId": "pmw814te2qx48",
+      "lng": -79.830937,
+      "lat": 32.767136,
+      "revealed": false,
+      "scale": 1
+    },
+    {
+      "id": "pmwvpi7nqawcq",
+      "title": "Hold the Picket",
+      "description": "“Holloway men are coming tonight to take the causeway. Gus can’t hold it alone. Stay until dawn.”\nReward: $20 and a harpoon (1d8).",
+      "status": "active",
+      "giver": "Gus Tibbs",
+      "locationId": "pmw8159177p7y",
+      "lng": -79.83629,
+      "lat": 32.768232,
+      "revealed": false,
       "scale": 1
     }
   ],
