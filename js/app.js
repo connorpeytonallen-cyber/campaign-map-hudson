@@ -1484,7 +1484,7 @@
     const quests = visibleQuests(data);
     const unseen = new Set(unseenQuests().map((q) => q.id));
     const beasts = data.monsters.filter((m) => m.revealed);
-    const tabs = [['character', 'Character'], ['notes', 'My notes'], ['quests', `Quests${unseen.size ? ' (' + unseen.size + ' new)' : ''}`], ['people', 'People']];
+    const tabs = [['character', 'Character'], ['vitals', 'Sanity & Hunger'], ['notes', 'My notes'], ['quests', `Quests${unseen.size ? ' (' + unseen.size + ' new)' : ''}`], ['people', 'People']];
     if (beasts.length) tabs.push(['bestiary', 'Bestiary']);
     if (logTab === 'bestiary' && !beasts.length) logTab = 'character';
     lb.appendChild(tabBar(tabs, logTab, (id) => { logTab = id; renderLog(); }));
@@ -1492,6 +1492,8 @@
     const body = el('div', 'tab-body');
     if (logTab === 'character') {
       renderCharacter(body);
+    } else if (logTab === 'vitals') {
+      renderVitals(body);
     } else if (logTab === 'quests') {
       if (!quests.length) body.appendChild(el('p', 'empty', 'No quests yet. When your DM gives you one, it shows up here.'));
       const groups = [['active', 'Active'], ['done', 'Completed'], ['failed', 'Failed']];
@@ -1576,9 +1578,9 @@
     } catch (e) { relayState = 'offline'; renderParty(); return; }
     relay.on('connect', () => {
       relayState = 'live';
-      relay.subscribe([`${ROOM}/p/+`, `${ROOM}/rename/${me.id}`, `${ROOM}/dice/log`, `${ROOM}/kick/+`, `${ROOM}/sound`, `${ROOM}/sound/state`, `${ROOM}/abilities/${me.id}`, `${ROOM}/partypos`, `${ROOM}/clock`]);
-      if (editing) relay.subscribe([`${ROOM}/abilities/+`, `${ROOM}/sheet/+`]);
-      restorePartyPos(); restoreClock();
+      relay.subscribe([`${ROOM}/p/+`, `${ROOM}/rename/${me.id}`, `${ROOM}/dice/log`, `${ROOM}/kick/+`, `${ROOM}/sound`, `${ROOM}/sound/state`, `${ROOM}/abilities/${me.id}`, `${ROOM}/partypos`, `${ROOM}/clock`, `${ROOM}/vitals/${me.id}`]);
+      if (editing) relay.subscribe([`${ROOM}/abilities/+`, `${ROOM}/sheet/+`, `${ROOM}/vitals/+`]);
+      restorePartyPos(); restoreClock(); shareVitalsOnce();
       announce();
       resendSheetIfPending();
       renderParty();
@@ -1601,6 +1603,7 @@
     if (topic.startsWith(`${ROOM}/abilities/`)) { onAbilityMessage(topic.split('/').pop(), txt); return; }
     if (topic.startsWith(`${ROOM}/sheet/`)) { onSheetMessage(topic.split('/').pop(), txt); return; }
     if (topic === `${ROOM}/clock`) { onClockMessage(txt); return; }
+    if (topic.startsWith(`${ROOM}/vitals/`)) { onVitalsMessage(topic.split('/').pop(), txt); return; }
     if (topic === `${ROOM}/partypos`) { try { onPartyPosMessage(txt); } catch (e) { /* bad message */ } return; }
     if (topic === `${ROOM}/rename/${me.id}`) {
       if (!txt) return;
@@ -2646,6 +2649,140 @@
     body.appendChild(saveRow);
     body.appendChild(el('p', 'meta', 'Your character sheet is kept in this browser on this device.'));
   }
+  // ===== Sanity & hunger: each player's levels (0–100%), kept on the relay so the DM and player both see changes =====
+  const SANITY_TIERS = [
+    [76, 'Steady', 'No penalty.'],
+    [51, 'Shaken', '−1 to Composure and Sense checks.'],
+    [26, 'Unraveling', '−2 to all Social and Outlook checks. You may see things that aren’t there.'],
+    [0, 'Broken', 'Disadvantage on all checks. At the start of each fight, make a DC 13 Composure check or lose your first turn.']
+  ];
+  const HUNGER_TIERS = [
+    [76, 'Fed', 'No penalty.'],
+    [51, 'Peckish', '−1 to Wit and Social checks.'],
+    [26, 'Hungry', '−2 to all checks.'],
+    [0, 'Starving', 'Disadvantage on all checks. Take 1d4 damage at the start of each day.']
+  ];
+  const TIER_COLORS = ['#4ade80', '#facc15', '#fb923c', '#ef4444'];
+  const tierOf = (tiers, v) => { const i = tiers.findIndex(([min]) => v >= min); return { i, name: tiers[i][1], effect: tiers[i][2], color: TIER_COLORS[i] }; };
+  const DAILY_FOOD = 15, NO_SLEEP = 10;
+  const VITALS_KEY = () => 'campaign-map.vitals:' + SITE_KEY, DM_VITALS_KEY = () => 'campaign-map.dmVitals:' + SITE_KEY;
+  const pct = (v) => Math.max(0, Math.min(100, Math.round(num(v) == null ? 100 : num(v))));
+  const cleanVitals = (v) => ({ sanity: pct(v && v.sanity), hunger: pct(v && v.hunger), ts: num(v && v.ts) || 0 });
+  const myVitals = () => cleanVitals(lsGet(VITALS_KEY(), {}));
+  let vitalsHeard = false;
+  function publishVitals(id, v) {
+    v.ts = Date.now();
+    if (id === me.id) lsSet(VITALS_KEY(), v);
+    if (editing) { const all = lsGet(DM_VITALS_KEY(), {}) || {}; all[id] = v; lsSet(DM_VITALS_KEY(), all); }
+    if (relay && relay.connected) relay.publish(`${ROOM}/vitals/${id}`, JSON.stringify(v), { retain: true });
+  }
+  function onVitalsMessage(id, txt) {
+    if (!txt) return;
+    let v;
+    try { v = cleanVitals(JSON.parse(txt)); } catch (e) { return; }
+    if (id === me.id) {
+      vitalsHeard = true;
+      if (v.ts >= myVitals().ts) { lsSet(VITALS_KEY(), v); if (!$('#logbook').hidden && logTab === 'vitals') renderLog(); }
+    }
+    if (editing) {
+      const all = lsGet(DM_VITALS_KEY(), {}) || {};
+      if (!all[id] || (num(all[id].ts) || 0) <= v.ts) { all[id] = v; lsSet(DM_VITALS_KEY(), all); }
+      const typing = document.activeElement && document.activeElement.closest && document.activeElement.closest('.vit-table');
+      if (currentView === 'characters' && !typing) showCharacters(selectedId);
+    }
+  }
+  // A player who has never shared their levels does so once (after any saved ones from the DM have arrived).
+  function shareVitalsOnce() {
+    setTimeout(() => { if (!editing && !vitalsHeard && !myVitals().ts) publishVitals(me.id, myVitals()); }, 3000);
+  }
+  // A meter with its tier, effect and quick buttons. onSet(newValue) saves it.
+  function vitalMeter(kind, value, onSet, compact) {
+    const tiers = kind === 'sanity' ? SANITY_TIERS : HUNGER_TIERS, t = tierOf(tiers, value);
+    const card = el('div', 'vit-card' + (compact ? ' compact' : ''));
+    const top = el('div', 'vit-top');
+    top.appendChild(el('b', 'vit-name', kind === 'sanity' ? 'Sanity' : 'Hunger'));
+    const tag = el('span', 'vit-tier', t.name); tag.style.color = t.color; tag.style.borderColor = t.color;
+    top.appendChild(tag);
+    top.appendChild(el('span', 'vit-pct', value + '%'));
+    card.appendChild(top);
+    const bar = el('div', 'vit-bar'), fill = el('div', 'vit-fill');
+    fill.style.width = value + '%'; fill.style.background = t.color;
+    bar.appendChild(fill);
+    card.appendChild(bar);
+    if (!compact) card.appendChild(el('p', 'vit-effect', t.effect));
+    const row = el('div', 'vit-btns');
+    [-10, -5, 5, 10].forEach((d) => row.appendChild(btn((d > 0 ? '+' : '−') + Math.abs(d), 'small ghost', () => onSet(pct(value + d)))));
+    const inp = el('input');
+    inp.type = 'number'; inp.min = '0'; inp.max = '100'; inp.value = String(value); inp.title = 'Set exactly';
+    inp.onchange = () => onSet(pct(inp.value));
+    row.appendChild(inp);
+    if (!compact) row.appendChild(kind === 'sanity'
+      ? btn(`No sleep (−${NO_SLEEP}%)`, 'small', () => onSet(pct(value - NO_SLEEP)))
+      : btn(`Missed a day of food (−${DAILY_FOOD}%)`, 'small', () => onSet(pct(value - DAILY_FOOD))));
+    card.appendChild(row);
+    return card;
+  }
+  function renderVitals(body) {
+    const v = myVitals();
+    const set = (k) => (nv) => { const cur = myVitals(); cur[k] = nv; publishVitals(me.id, cur); renderLog(); };
+    body.appendChild(vitalMeter('sanity', v.sanity, set('sanity')));
+    body.appendChild(vitalMeter('hunger', v.hunger, set('hunger')));
+    const guide = el('div', 'vit-guide');
+    [['Sanity', SANITY_TIERS], ['Hunger', HUNGER_TIERS]].forEach(([title, tiers]) => {
+      guide.appendChild(el('div', 'cs-h', title + ' levels'));
+      tiers.forEach(([min, name, effect], i) => {
+        const r = el('div', 'vit-row');
+        const max = i ? tiers[i - 1][0] - 1 : 100;
+        const n = el('b', null, `${name} (${min}–${max}%)`); n.style.color = TIER_COLORS[i];
+        r.appendChild(n); r.appendChild(el('span', null, effect));
+        guide.appendChild(r);
+      });
+    });
+    body.appendChild(guide);
+    body.appendChild(el('p', 'meta', `Food drops ${DAILY_FOOD}% at the start of each in-game day. Going without sleep costs ${NO_SLEEP}% sanity. Your DM can also change these.`));
+  }
+  // The DM's table of everyone's levels (Characters tab).
+  function vitalsTable() {
+    const all = lsGet(DM_VITALS_KEY(), {}) || {};
+    const names = Object.assign({}, lsGet(KNOWN_KEY(), {}) || {});
+    const sheets = lsGet(DM_SHEETS_KEY(), {}) || {};
+    Object.entries(sheets).forEach(([id, s]) => { names[id] = names[id] || s.by; });
+    for (const p of party.values()) if (!p.dm) names[p.id] = p.name || names[p.id] || 'Unnamed';
+    Object.keys(all).forEach((id) => { if (!names[id]) names[id] = 'Unknown player'; });
+    delete names[me.id];
+    const ids = Object.keys(names);
+    const wrap = el('div', 'vit-table');
+    wrap.appendChild(el('div', 'sub-h', 'Sanity & hunger'));
+    if (!ids.length) { wrap.appendChild(el('p', 'muted', 'No players yet.')); return wrap; }
+    ids.forEach((id) => {
+      const v = cleanVitals(all[id]);
+      const row = el('div', 'vit-player');
+      row.appendChild(el('b', 'vit-pname', (sheets[id] && sheets[id].sheet.name) ? `${sheets[id].sheet.name} · ${names[id]}` : names[id]));
+      const set = (k) => (nv) => { const cur = cleanVitals((lsGet(DM_VITALS_KEY(), {}) || {})[id]); cur[k] = nv; publishVitals(id, cur); showCharacters(selectedId); };
+      row.appendChild(vitalMeter('sanity', v.sanity, set('sanity'), true));
+      row.appendChild(vitalMeter('hunger', v.hunger, set('hunger'), true));
+      wrap.appendChild(row);
+    });
+    const allRow = el('div', 'btn-row');
+    const everyone = (k, d) => () => { ids.forEach((id) => { const cur = cleanVitals((lsGet(DM_VITALS_KEY(), {}) || {})[id]); cur[k] = pct(cur[k] - d); publishVitals(id, cur); }); showCharacters(selectedId); };
+    allRow.appendChild(btn(`Everyone: no sleep (−${NO_SLEEP}% sanity)`, 'small', everyone('sanity', NO_SLEEP)));
+    allRow.appendChild(btn(`Everyone: missed food (−${DAILY_FOOD}%)`, 'small', everyone('hunger', DAILY_FOOD)));
+    wrap.appendChild(allRow);
+    return wrap;
+  }
+  // A new in-game day: everyone gets hungrier.
+  function dailyFood(days) {
+    if (!editing || days <= 0) return;
+    const all = lsGet(DM_VITALS_KEY(), {}) || {};
+    const ids = new Set(Object.keys(all));
+    Object.keys(lsGet(KNOWN_KEY(), {}) || {}).forEach((id) => ids.add(id));
+    for (const p of party.values()) if (!p.dm) ids.add(p.id);
+    ids.delete(me.id);
+    ids.forEach((id) => { const cur = cleanVitals(all[id]); cur.hunger = pct(cur.hunger - DAILY_FOOD * days); publishVitals(id, cur); });
+    if (ids.size) toast(`A new day: everyone’s food went down ${DAILY_FOOD * days}%.`, 'info', 5000);
+    if (currentView === 'characters') showCharacters(selectedId);
+  }
+
   // ===== Saved characters go to the DM (over the live relay, kept there until replaced) =====
   const SHEET_SENT_KEY = () => 'campaign-map.sheetSent:' + SITE_KEY, DM_SHEETS_KEY = () => 'campaign-map.dmSheets:' + SITE_KEY;
   function sendSheet(s, loud) {
@@ -2764,7 +2901,7 @@
     renderAll();
     showList();
     announce(); renderParty(); renderDice(); renderSoundCtl();
-    if (relay && relay.connected) relay.subscribe([`${ROOM}/abilities/+`, `${ROOM}/sheet/+`]);
+    if (relay && relay.connected) relay.subscribe([`${ROOM}/abilities/+`, `${ROOM}/sheet/+`, `${ROOM}/vitals/+`]);
     renderPartyToken(false);
     restorePartyPos(); restoreClock(); renderClock();
   }
@@ -3751,7 +3888,9 @@
     return h < 4 ? 'Dead of night' : h < 6 ? 'Before dawn' : h < 8 ? 'Dawn' : h < 12 ? 'Morning' : h < 14 ? 'Midday' : h < 18 ? 'Afternoon' : h < 20 ? 'Dusk' : 'Night';
   }
   function setClock(abs, note) {
+    const before = clock;
     clock = { abs: Math.max(0, Math.round(abs)), start: DAY_START, ts: Date.now() };
+    if (before) dailyFood(clockDay(clock.abs) - clockDay(before.abs)); // each new day costs food
     lsSet(CLOCK_KEY(), clock);
     if (relay && relay.connected) relay.publish(`${ROOM}/clock`, JSON.stringify(clock), { retain: true });
     renderClock();
@@ -4011,10 +4150,14 @@
   // --- Characters: every player's saved sheet, read-only ---
   function showCharacters(id) {
     if (!editing) return;
+    const keepScroll = currentView === 'characters' && $('#ed-body') ? $('#ed-body').scrollTop : 0;
     currentView = 'characters'; selectedId = null; setTab('characters'); updateStatus(); popup.remove();
     const b = body();
+    b.appendChild(vitalsTable());
+    requestAnimationFrame(() => { b.scrollTop = keepScroll; });
     const all = lsGet(DM_SHEETS_KEY(), {}) || {};
     const ids = Object.keys(all).sort((x, y) => (all[y].ts || 0) - (all[x].ts || 0));
+    b.appendChild(el('div', 'sub-h', 'Character sheets'));
     if (!ids.length) {
       b.appendChild(el('p', 'muted', 'No characters yet. When a player presses “Save character” on their sheet, a copy shows up here.'));
       return;

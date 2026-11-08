@@ -502,4 +502,28 @@ body.editing .party-token { cursor: grab; }
 .clock-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .party-travel { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .party-travel select { font-size: 12px; padding: 4px 6px; margin: 0; }
-@media (max-width: 700px) { #clock { top: auto; bottom: 70px; } .clock-phase { display: none; } }
+@media (max-width: 700px) { #clock { top: auto; bottom: 70px; } .clock-phase { display: none; } }/* Sanity & hunger */
+.vit-card { border: 1px solid var(--line, #2c2c33); border-radius: 10px; padding: 12px; margin-bottom: 12px; background: rgba(255, 255, 255, .03); }
+.vit-card.compact { padding: 8px 10px; margin-bottom: 6px; }
+.vit-top { display: flex; align-items: center; gap: 8px; }
+.vit-name { font-size: 15px; color: var(--text); }
+.vit-card.compact .vit-name { font-size: 12px; min-width: 50px; }
+.vit-tier { font-size: 11px; font-weight: 700; padding: 1px 7px; border: 1px solid; border-radius: 999px; text-transform: uppercase; letter-spacing: .04em; }
+.vit-pct { margin-left: auto; font: 700 18px var(--ui); color: var(--text); font-variant-numeric: tabular-nums; }
+.vit-card.compact .vit-pct { font-size: 14px; }
+.vit-bar { height: 8px; border-radius: 999px; background: #26262c; overflow: hidden; margin: 8px 0; }
+.vit-card.compact .vit-bar { height: 5px; margin: 6px 0; }
+.vit-fill { height: 100%; border-radius: 999px; transition: width .3s, background .3s; }
+.vit-effect { margin: 0 0 8px; font-size: 13px; color: var(--text); }
+.vit-btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.vit-btns input { width: 64px; padding: 4px 6px; border-radius: 8px; border: 1px solid #3a3a41; background: #0f0f12; color: var(--text); font: 13px var(--ui); }
+.vit-card.compact .vit-btns button { padding: 2px 8px; font-size: 12px; }
+.vit-card.compact .vit-btns input { width: 54px; padding: 2px 6px; font-size: 12px; }
+.vit-guide { margin-top: 6px; }
+.vit-row { display: flex; flex-direction: column; gap: 2px; padding: 6px 0; border-bottom: 1px solid var(--line, #2c2c33); font-size: 13px; }
+.vit-row span { color: #a9a499; }
+.vit-player { padding: 8px 0 10px; border-bottom: 1px solid var(--line, #2c2c33); }
+.vit-pname { display: block; margin-bottom: 6px; font-size: 13px; color: var(--text); }
+.vit-table .btn-row { margin-top: 10px; }
+.vit-btns input[type=number] { display: inline-block !important; width: 64px !important; flex: none; margin: 0 !important; padding: 4px 6px !important; }
+.vit-card.compact .vit-btns input[type=number] { width: 54px !important; padding: 2px 6px !important; font-size: 12px; }
