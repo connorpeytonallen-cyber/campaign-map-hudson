@@ -399,6 +399,10 @@ body.editing .qmarker { cursor: grab; }
 .tabs { display: flex; gap: 2px; padding: 0 10px; margin-top: 10px; border-bottom: 1px solid var(--line); overflow-x: auto; }
 .tabs button { padding: 11px 10px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font: 600 13px var(--ui); white-space: nowrap; cursor: pointer; }
 .tabs button.on { color: var(--text); border-bottom-color: var(--pin, var(--accent)); }
+/* Logbook: every tab fits at once (two rows of three), so players never scroll sideways. */
+#logbook .tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 2px; overflow: visible; padding: 0 8px; }
+#logbook .tabs button { padding: 10px 4px 9px; white-space: normal; line-height: 1.2; text-align: center; }
+@media (max-width: 360px) { #logbook .tabs button { font-size: 12px; } }
 .tab-body { display: grid; gap: 12px; padding: 16px 18px 32px; }
 .prose { line-height: 1.6; color: #d9d4c8; overflow-wrap: anywhere; }
 .prose a { color: var(--pin, var(--accent)); }
