@@ -16803,7 +16803,7 @@ window.MAP_DATA = {
   "fog": [
     {
       "id": "pmw4hv3h0c4ox",
-      "name": "Fog 1",
+      "name": "Fog",
       "active": true,
       "shape": [
         [
