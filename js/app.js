@@ -91,6 +91,64 @@
   const fontInfo = (name) => FONTS.find((f) => f.name === name);
   // Sound categories in the DM's sound board ('' = not sorted yet).
   const PROWESS_KEYS = ['power', 'reflex', 'outlook', 'wit', 'endurance', 'social', 'serendipity'], STAT_MAX_M = 10;
+  // The DM's travel events, used until they edit the table in the Events tab.
+  const DEFAULT_EVENTS = `1. A Precinct Seven survey team of 3 officers stops the party, takes their names and asks where they’re headed. Everything gets written down.
+2. A stray dog with a collar follows them. Feed it 1 ration and it stays, giving advantage against the next ambush.
+3. A Hup’ehye crosses the road ahead, dragging a body. DC 12 Performance to let it pass unseen.
+4. The Peddler. Tobias Crane pushes a handcart hung with pots and bells. Whatever the party asks him for, he turns up with a week later, at a price. He sells:
+* Carbide miner’s lamp (light for a week, hands free): $25
+* Rabbit’s foot (once per session, reroll a Luck check): $20
+* Brass compass that points to the nearest settlement, not north: $30
+* Trench knife with a knuckle guard (1d6, +1 to hit; Roy can grapple while holding it): $35
+* Dr. Pell’s Tonic (roll: heals 1d6 or costs 1d4): $10
+* Smoke goggles (ignore disadvantage from ash and smoke): $15
+* A jar holding a Meeklain skull that clatters when something is hunting nearby: $40
+5. A dead phone booth rings. Whoever answers hears a party member’s voice describing exactly where they’re standing. DC 12 Composure or lose 10 sanity.
+6. A burned-out house. DC 12 Fortune finds $8 and 1 ration under the floorboards.
+7. A Meeklain band of 1d4+2 clatters out of the ditch at dusk.
+8. A stranger by a fire offers to share it for one story about the fog. Each storyteller regains 10 sanity. Weeks later, someone repeats the party’s stories back to them.
+9. Ash rain. It falls thick for an hour, and everyone makes a DC 11 Tolerance check or takes 1d4.
+10. An old man pushes a wheelbarrow holding his wife’s body, looking for a place to bury her. Help him (an hour’s work) and he gives them his pocket watch ($8 at Dot’s).
+11. Breakwater deserters, two young soldiers, beg for food and directions anywhere but home. Report them to Breakwater for $20 each, or let them go.
+12. A mailbox stuffed with letters that were never delivered. One is addressed to a party member.
+13. A cart horse stands in the road, harnessed to nothing, perfectly calm. It follows whoever leads it and can carry heavy loads.
+14. A woman screams for help from a cellar. If the party goes down: DC 14 Insight. It’s a mimic, and it has been practicing her voice for days.
+15. A preacher on a crate shouts that the red god is coming to save the faithful. Dean feels the Old God of Crimson turn its attention toward him, and the empty place in his stomach aches.
+16. Arrows painted on the road in white house paint lead off into a field and end at a shallow grave. In it: a man clutching a tin box with $12 and a hand-drawn map to a second box.
+17. Thick fog rolls in. Each character makes a DC 12 Sense check or gets separated for an hour.
+18. A pair of boots sits neatly in the middle of the road, still warm inside. They fit someone in the party perfectly.
+19. A Precinct Seven gallows at a crossroads, freshly built and empty. A sign says the next looter caught goes here.
+20. A boy sells “magic” cigarettes, 2 for $5. They work exactly like normal cigarettes, and he’s grateful for the money.
+21. A lone Meeklain carrying a horse skull bigger than itself. It drops the skull and flees if spotted.
+22. A radio playing inside an abandoned car: the 3 a.m. voice, in broad daylight.
+23. An ambush. Three scavengers with clubs (1d6) demand half the party’s food. They run if one of them is hurt.
+24. A wounded Camp Harmony raider asks for a bandage. Helping him earns Nickel’s goodwill, and the next toll is free.
+25. A mass of flies over a ditch. Inside is a dead Hup’ehye, torn open by something bigger.
+26. A schoolteacher leading six children asks the party to walk them to the nearest settlement. It takes half a day, and the children have nothing to pay with but drawings.
+27. A tin of peaches, perfectly sealed, sits on a fence post (1 ration). There’s another two miles on, and another after that, as if someone is leading them somewhere.
+28. A field of scarecrows. One wears a police uniform with badge number 77.
+29. Hunger pangs. The road stretches longer than expected, and everyone loses 10 hunger.
+30. A Breakwater recruiter at a folding table offers residency papers to anyone who signs on for six months on the seawall.
+31. An abandoned bicycle. One rider travels roads twice as fast, but on every trip roll a d6: on a 1, the chain snaps.
+32. A drifter wearing Edwin’s silver locket. He found it, he says, and he’ll trade it for 2 rations, or fight for it.
+33. A blind woman describes every party member perfectly as they approach. “It sees through me,” she says. “It sees everything.”
+34. Children in a dead yard, playing ring-around and chanting a rhyme about an empty chair waiting for its king.
+35. A Breakwater trade cart: a mule, two soldiers, and a Breakwater price list for anyone who can pay. Papers get a discount.
+36. A sinkhole opens under the road. DC 12 Performance, or one character falls for 1d6. At the bottom is an old tunnel with a crate holding 4 pistol rounds.
+37. A Precinct Seven wanted poster nailed to a pole, with a sketch of a party member and a $25 reward.
+38. The road is carpeted with dead locusts, flecked with gold. DC 12 Fortune gathers $1d6 in gold dust.
+39. Tolly from Camp Harmony has set up a toll farther out than Harmony usually claims: $5 a head. Nickel is expanding.
+40. A traveling dentist pulls bad teeth for $5 and pays $10 for gold ones. He carries a bag full of them.
+41. A Hup’ehye walks toward the party along the road, slow and unhurried. Run, hide (DC 13 Performance), or fight.
+42. A roadside shrine with a collection box nailed to a post. It holds $6, and anyone who leaves something regains 10 sanity.
+43. A billboard for JOE’S FINEST with the eyes scratched out. The scratches are fresh. Someone did it today.
+44. Two soldiers escort a hooded prisoner. As they pass, the prisoner says one word: a party member’s name.
+45. A pile of shoes at a crossroads, dozens of pairs, sorted by size.
+46. A friendly couple trades a hot meal (1 ration each) for news of Hudson. They’re honest, and they’ll pass the news along to whoever comes next.
+47. A rope bridge over a gully, half rotten. DC 12 Performance to cross, or take a 2-hour detour.
+48. A Meeklain band of 1d6+4 tries the doors of an abandoned house where someone is hiding. Rescue them and the survivor, a young mechanic, can fix anything given an hour.
+49. A quiet road. Nothing happens, and the silence is a relief. Everyone regains 5 sanity.
+50. A child’s red wagon sits in the road with 2 rations and a note: “For whoever needs it more.”`;
   const SOUND_CATS = [['music', 'Background Music'], ['ambience', 'Ambience'], ['physical', 'Physical Effects'], ['monsters', 'Monsters'], ['interactive', 'Interactive'], ['', 'Unsorted']];
   // Travel per day for a party of 4, in travel miles: [average, brisk, non-stop].
   const TRAVEL = {
@@ -384,6 +442,14 @@
     };
     // Travel: how many miles of in-game travel one real mile on the map counts as.
     out.travel = { scale: rng(d.travel && d.travel.scale, 1, 20, TRAVEL_SCALE_DEFAULT) };
+    // Random travel events (DM only). A map that has never had a table starts with the default one.
+    const ev = d.events && typeof d.events === 'object' ? d.events : null;
+    out.events = {
+      table: ev ? str(ev.table) : DEFAULT_EVENTS,
+      auto: ev ? ev.auto !== false : true,
+      chance: Math.round(rng(ev && ev.chance, 0, 100, 40)),
+      maxPerDay: Math.round(rng(ev && ev.maxPerDay, 0, 6, 2))
+    };
     return out;
   }
   // A region's coast-traced outline: [polygon[ring[[lng,lat]...]]], or null.
@@ -559,7 +625,7 @@
       } catch (e) { shown = false; setTimeout(showBase, 200); }
     };
     map.on('sourcedata', (e) => { if (e.sourceId === 'fog' && map.isSourceLoaded('fog')) requestAnimationFrame(showBase); });
-    map.on('load', () => { styleReady = true; fitSize(); renderFog(); renderRegions(); renderFire(); renderClock(); applyTerrain(); setTimeout(showBase, 3000); });
+    map.on('load', () => { styleReady = true; fitSize(); renderFog(); renderRegions(); renderFire(); renderClock(); applyTerrain(); applyWeather(); setTimeout(showBase, 3000); });
     map.on('styleimagemissing', (e) => {
       if ((e.id === 'fog-tex' || e.id === 'fog-wisp') && !map.hasImage(e.id)) { buildFogLook(); pushFogImages(); startFogAnim(); }
       if (/^flame-\d$/.test(e.id) && !map.hasImage(e.id)) fireFrame();
@@ -715,7 +781,7 @@
   }
   // (Re)build the fog images when the look changes. Returns true if anything changed.
   function buildFogLook() {
-    const st = data.fogStyle, L = FOG_LOOKS[st.look] || FOG_LOOKS.smoke;
+    const st = fogStyleNow(), L = FOG_LOOKS[st.look] || FOG_LOOKS.smoke;
     const nk = st.look + ':' + st.seed;
     if (fogFx.noiseKey !== nk) {
       fogFx.nb = fogNoise(FOG_S, L.base[0], L.base[1], L.base[2], st.seed);
@@ -963,7 +1029,7 @@
   }
   // Players see thick fog with soft edges; you see it see-through with an outline.
   function applyFogLook() {
-    const st = data.fogStyle, c = 'rgb(' + fogBaseColor(st).join(',') + ')';
+    const st = fogStyleNow(), c = 'rgb(' + fogBaseColor(st).join(',') + ')';
     try {
       map.setPaintProperty('fog-fill', 'fill-opacity', editing ? 0.55 : st.thickness);
       map.setPaintProperty('fog-edge', 'line-opacity', editing ? 0 : 0.9 * st.thickness);
@@ -1906,9 +1972,9 @@
     } catch (e) { relayState = 'offline'; renderParty(); return; }
     relay.on('connect', () => {
       relayState = 'live';
-      relay.subscribe([`${ROOM}/p/+`, `${ROOM}/rename/${me.id}`, `${ROOM}/dice/log`, `${ROOM}/kick/+`, `${ROOM}/sound`, `${ROOM}/sound/state`, `${ROOM}/abilities/${me.id}`, `${ROOM}/partypos`, `${ROOM}/clock`, `${ROOM}/vitals/${me.id}`]);
+      relay.subscribe([`${ROOM}/p/+`, `${ROOM}/rename/${me.id}`, `${ROOM}/dice/log`, `${ROOM}/kick/+`, `${ROOM}/sound`, `${ROOM}/sound/state`, `${ROOM}/abilities/${me.id}`, `${ROOM}/partypos`, `${ROOM}/clock`, `${ROOM}/weather`, `${ROOM}/vitals/${me.id}`]);
       if (editing) relay.subscribe([`${ROOM}/abilities/+`, `${ROOM}/sheet/+`, `${ROOM}/vitals/+`]);
-      restorePartyPos(); restoreClock(); shareVitalsOnce();
+      restorePartyPos(); restoreClock(); restoreWeather(); shareVitalsOnce();
       announce();
       resendSheetIfPending();
       renderParty();
@@ -1931,6 +1997,7 @@
     if (topic.startsWith(`${ROOM}/abilities/`)) { onAbilityMessage(topic.split('/').pop(), txt); return; }
     if (topic.startsWith(`${ROOM}/sheet/`)) { onSheetMessage(topic.split('/').pop(), txt); return; }
     if (topic === `${ROOM}/clock`) { onClockMessage(txt); return; }
+    if (topic === `${ROOM}/weather`) { onWeatherMessage(txt); return; }
     if (topic.startsWith(`${ROOM}/vitals/`)) { onVitalsMessage(topic.split('/').pop(), txt); return; }
     if (topic === `${ROOM}/partypos`) { try { onPartyPosMessage(txt); } catch (e) { /* bad message */ } return; }
     if (topic === `${ROOM}/rename/${me.id}`) {
@@ -2472,6 +2539,8 @@
   const loops = new Map();          // sound id -> looping Audio
   const oneShots = new Set();       // one-shot Audio elements still playing
   const activeLoopIds = new Set();  // loops the DM has running
+  const loopTargets = new Map();    // loop id -> the one player it's playing for (none = everyone)
+  let soundTarget = '';             // who the DM's next Play is for ('' = everyone)
   const soundById = (id) => data.sounds.find((s) => s.id === id) || published.sounds.find((s) => s.id === id);
   const outVol = (s) => (soundPrefs.muted ? 0 : Math.max(0, Math.min(1, s.volume * soundPrefs.volume)));
   function playLocal(id) {
@@ -2505,7 +2574,7 @@
   }
   function sendSound(m) { if (relay && relay.connected) relay.publish(`${ROOM}/sound`, JSON.stringify(Object.assign({ ts: Date.now() }, m))); }
   function publishLoopState() {
-    if (relay && relay.connected) relay.publish(`${ROOM}/sound/state`, JSON.stringify({ loops: [...activeLoopIds], ts: Date.now() }), { retain: true });
+    if (relay && relay.connected) relay.publish(`${ROOM}/sound/state`, JSON.stringify({ loops: [...activeLoopIds], to: Object.fromEntries([...loopTargets].filter(([id]) => activeLoopIds.has(id))), ts: Date.now() }), { retain: true });
   }
   function onSoundMessage(topic, txt) {
     if (isKicked() || !txt) return;
@@ -2513,12 +2582,16 @@
     try { m = JSON.parse(txt); } catch (e) { return; }
     if (topic.endsWith('/sound/state')) {
       const fresh = Date.now() - (num(m.ts) || 0) < LOOP_STATE_MAX_AGE;
-      remoteLoops = fresh ? arr(m.loops).filter((x) => typeof x === 'string') : [];
-      if (editing) { activeLoopIds.clear(); remoteLoops.forEach((id) => activeLoopIds.add(id)); refreshSoundRows(); }
+      const to = m.to && typeof m.to === 'object' ? m.to : {};
+      const all = fresh ? arr(m.loops).filter((x) => typeof x === 'string') : [];
+      // A loop meant for one player only plays for them.
+      remoteLoops = editing ? all : all.filter((id) => !to[id] || to[id] === me.id);
+      if (editing) { activeLoopIds.clear(); loopTargets.clear(); all.forEach((id) => { activeLoopIds.add(id); if (to[id]) loopTargets.set(id, str(to[id])); }); refreshSoundRows(); }
       syncLoops();
       return;
     }
     if (editing) return; // the DM already heard it
+    if (m.to && m.to !== me.id) return; // meant for someone else
     if (m.action === 'play' && Date.now() - (num(m.ts) || 0) < 30000) playLocal(str(m.id));
     if (m.action === 'stopall') stopAllLocal();
   }
@@ -2526,11 +2599,13 @@
   function dmPlay(s) {
     if (!published.sounds.some((p) => p.id === s.id && p.audio === s.audio)) toast('Only you can hear this one until you Publish, because players don’t have it yet.', 'warn', 6000);
     playLocal(s.id);
-    if (s.loop) { activeLoopIds.add(s.id); publishLoopState(); } else sendSound({ action: 'play', id: s.id });
+    const to = soundTarget && party.has(soundTarget) ? soundTarget : '';
+    if (s.loop) { activeLoopIds.add(s.id); if (to) loopTargets.set(s.id, to); else loopTargets.delete(s.id); publishLoopState(); } else sendSound(Object.assign({ action: 'play', id: s.id }, to ? { to } : {}));
+    if (to) toast(`Playing “${s.name}” for ${(party.get(to) || {}).name || 'that player'} only.`, 'info', 3500);
     refreshSoundRows();
   }
-  function dmStop(s) { stopLocal(s.id); activeLoopIds.delete(s.id); publishLoopState(); refreshSoundRows(); }
-  function dmStopAll() { stopAllLocal(); activeLoopIds.clear(); publishLoopState(); sendSound({ action: 'stopall' }); refreshSoundRows(); }
+  function dmStop(s) { stopLocal(s.id); activeLoopIds.delete(s.id); loopTargets.delete(s.id); publishLoopState(); refreshSoundRows(); }
+  function dmStopAll() { stopAllLocal(); activeLoopIds.clear(); loopTargets.clear(); publishLoopState(); sendSound({ action: 'stopall' }); refreshSoundRows(); }
   // Players' sound control (top right, under the Logbook)
   function renderSoundCtl() {
     const box = $('#sound-ctl');
@@ -2620,6 +2695,14 @@
     top.appendChild(up);
     top.appendChild(btn('Stop all', 'small', dmStopAll));
     b.appendChild(top);
+    // Who hears the next sound you play.
+    const now = Date.now(), players = [...party.values()].filter((p) => !p.dm && now - p.ts < ONLINE_MS);
+    if (soundTarget && !players.some((p) => p.id === soundTarget)) soundTarget = '';
+    const tsel = selectInput([['', 'Everyone']].concat(players.map((p) => [p.id, (p.name || 'Unnamed') + ' only'])), soundTarget, (v) => { soundTarget = v; showSounds(); });
+    const tf = field('Play for', tsel);
+    if (soundTarget) tf.classList.add('sound-target-on');
+    b.appendChild(tf);
+    if (soundTarget) b.appendChild(el('p', 'tip', 'Only that player hears what you play next (you hear it too). Loops keep playing just for them until you stop them.'));
     b.appendChild(el('p', 'tip', `Press Play during the session and it plays on every open map. Loops keep going (and start for anyone who joins) until you stop them. Publish after adding sounds so players get them. Up to ${MAX_AUDIO_MB} MB per file.`));
     if (!data.sounds.length) { b.appendChild(el('p', 'muted', 'No sounds yet. Pick a category below, then upload MP3s into it.')); }
     // Category chips: show one group at a time so there's less scrolling.
@@ -2681,6 +2764,9 @@
       b.textContent = playing ? 'Stop' : 'Play';
       b.classList.toggle('accent', playing);
       row.classList.toggle('playing', playing);
+      const who = playing && loopTargets.get(s.id);
+      b.title = who ? 'Playing for ' + ((party.get(who) || {}).name || 'one player') + ' only' : '';
+      row.classList.toggle('private', !!who);
     });
   }
 
@@ -3206,7 +3292,7 @@
   const PANEL_HTML = `
     <div class="ed-head"><div class="ed-title">Map editor</div><div class="ed-status" id="ed-status"></div></div>
     <div class="ed-actions"><button type="button" class="btn accent" id="ed-publish">Publish</button></div>
-    <div class="ed-tabs"><button type="button" data-tab="list">Pins</button><button type="button" data-tab="regions">Regions</button><button type="button" data-tab="quests">Quests</button><button type="button" data-tab="fog">Fog</button><button type="button" data-tab="stickers">Stickers</button><button type="button" data-tab="ruler">Ruler</button><button type="button" data-tab="characters">Characters</button><button type="button" data-tab="monsters">Monsters</button><button type="button" data-tab="sounds">Sounds</button><button type="button" data-tab="settings">Settings</button></div>
+    <div class="ed-tabs"><button type="button" data-tab="list">Pins</button><button type="button" data-tab="regions">Regions</button><button type="button" data-tab="quests">Quests</button><button type="button" data-tab="fog">Fog</button><button type="button" data-tab="stickers">Stickers</button><button type="button" data-tab="ruler">Ruler</button><button type="button" data-tab="characters">Characters</button><button type="button" data-tab="monsters">Monsters</button><button type="button" data-tab="events">Events</button><button type="button" data-tab="sounds">Sounds</button><button type="button" data-tab="settings">Settings</button></div>
     <div class="ed-body" id="ed-body"></div>
     <div class="ed-foot"><span class="muted small">Only you can publish changes.</span>
       <button type="button" class="btn ghost small" id="ed-exit">Exit editor</button></div>`;
@@ -3338,6 +3424,7 @@
     else if (tab === 'ruler') showRuler();
     else if (tab === 'characters') showCharacters();
     else if (tab === 'monsters') showMonsters();
+    else if (tab === 'events') showEvents();
     else if (tab === 'sounds') showSounds();
     else if (tab === 'settings') showSettings();
     else showList();
@@ -3359,6 +3446,7 @@
     else if (currentView === 'monster' && data.monsters.some((m) => m.id === selectedId)) showMonsterForm(data.monsters.find((m) => m.id === selectedId));
     else if (currentView === 'monster' && data.bestiary.some((x) => x.id === selectedId)) showBeastForm(data.bestiary.find((x) => x.id === selectedId));
     else if (currentView === 'monsters' || currentView === 'monster') showMonsters();
+    else if (currentView === 'events') showEvents();
     else if (currentView === 'sounds') showSounds();
     else if (currentView === 'characters') showCharacters(selectedId);
     else if (currentView === 'ruler') showRuler();
@@ -4455,7 +4543,7 @@
   function setClock(abs, note) {
     const before = clock;
     clock = { abs: Math.max(0, Math.round(abs)), start: DAY_START, ts: Date.now() };
-    if (before) dailyFood(clockDay(clock.abs) - clockDay(before.abs)); // each new day costs food
+    if (before) { dailyFood(clockDay(clock.abs) - clockDay(before.abs)); dailyWeather(clockDay(clock.abs) - clockDay(before.abs)); } // each new day costs food (and may bring new weather)
     lsSet(CLOCK_KEY(), clock);
     if (relay && relay.connected) relay.publish(`${ROOM}/clock`, JSON.stringify(clock), { retain: true });
     renderClock();
@@ -4488,8 +4576,14 @@
       const step = isNight(clockTod(abs)) ? 1 / 12 : 1 / 6;
       left -= step; abs += 10;
     }
+    // Weather: mud adds an hour on foot; storms keep boats in.
+    let wnote = '';
+    if (weather.k === 'rain' && partyTravel.mode === 'foot') { abs += 60; wnote = ' Heavy rain: +1 hour in the mud.'; }
+    if (weather.k === 'storm' && partyTravel.mode === 'boat') wnote = ' Thunderstorm: boats shouldn’t be out!';
     const spent = abs - clock.abs;
-    setClock(abs, `${TRAVEL[partyTravel.mode].name}, ${PACES[partyTravel.pace][0].toLowerCase()}: ${fmtMi(t.travelMi)} miles took ${fmtDuration(spent / 60, 24)}. It’s now ${fmtClock(clockTod(abs))}, Day ${clockDay(abs)}.${tnote ? ' ' + tnote : ''}`);
+    const startAbs = clock.abs;
+    setClock(abs, `${TRAVEL[partyTravel.mode].name}, ${PACES[partyTravel.pace][0].toLowerCase()}: ${fmtMi(t.travelMi)} miles took ${fmtDuration(spent / 60, 24)}. It’s now ${fmtClock(clockTod(abs))}, Day ${clockDay(abs)}.${tnote ? ' ' + tnote : ''}${wnote}`);
+    travelEvents(startAbs, spent);
   }
   // How the map looks at each hour: [hour, colour, opacity] (a dark wash at night, warm at dawn and dusk).
   const DAYLIGHT = [[0, '#02051a', .55], [4.5, '#02051a', .55], [6, '#ff8f4d', .16], [7.5, '#fff1d6', .05], [16.5, '#fff1d6', .05], [18.5, '#ff6a3d', .16], [20, '#0a0f30', .42], [24, '#02051a', .55]];
@@ -5081,6 +5175,303 @@
     }));
     foot.appendChild(btn('Done', 'primary', () => showMonsters('dm')));
     b.appendChild(foot);
+  }
+
+  // --- Events tab (DM only): random travel events + weather ---
+  let eventsTab = 'events';
+  const EVT_KEY = () => 'campaign-map.events:' + SITE_KEY;
+  const evtState = () => { const s = lsGet(EVT_KEY(), {}) || {}; return { carry: num(s.carry) || 0, perDay: s.perDay && typeof s.perDay === 'object' ? s.perDay : {}, log: arr(s.log).slice(0, 30) }; };
+  // Split the pasted table into entries: "12. text" starts one, "* item" lines belong to the one above,
+  // and a line with no number on its own is an entry too.
+  function parseEvents(text) {
+    const out = [];
+    let cur = null, blank = true;
+    str(text).split('\n').forEach((raw) => {
+      const line = raw.trim();
+      if (!line) { blank = true; return; }
+      const numd = /^(\d+)\s*[.)]\s*(.*)$/.exec(line), bullet = /^[*\-•]\s+(.*)$/.exec(line);
+      if (numd) { cur = { n: +numd[1], text: numd[2], items: [] }; out.push(cur); }
+      else if (bullet && cur) cur.items.push(bullet[1]);
+      else if (cur && !blank) cur.text += ' ' + line;
+      else { cur = { n: null, text: line, items: [] }; out.push(cur); }
+      blank = false;
+    });
+    let next = out.reduce((m, e) => Math.max(m, e.n || 0), 0);
+    out.forEach((e) => { if (e.n == null) e.n = ++next; });
+    return out.sort((a, b) => a.n - b.n);
+  }
+  function eventCard(e, extra) {
+    const c = el('div', 'evt-card');
+    const h = el('div', 'evt-head');
+    h.appendChild(el('span', 'evt-num', '#' + e.n));
+    if (extra) h.appendChild(el('span', 'evt-when', extra));
+    c.appendChild(h);
+    const p = el('p', 'evt-text'); p.innerHTML = richText(e.text); c.appendChild(p);
+    if (e.items.length) { const ul = el('ul', 'evt-items'); e.items.forEach((it) => { const li = el('li'); li.innerHTML = richText(it); ul.appendChild(li); }); c.appendChild(ul); }
+    return c;
+  }
+  const clockLabel = (abs) => `Day ${clockDay(abs)}, ${fmtClock(clockTod(abs))}`;
+  function logEvent(e, auto, abs) {
+    const s = evtState();
+    s.log.unshift({ n: e.n, text: e.text, items: e.items, auto: !!auto, when: abs != null ? clockLabel(abs) : '', ts: Date.now() });
+    s.log = s.log.slice(0, 30);
+    lsSet(EVT_KEY(), s);
+  }
+  function rollEvent(auto, abs) {
+    const list = parseEvents(data.events.table);
+    if (!list.length) { if (!auto) toast('Your event table is empty. Paste it in below.', 'warn'); return null; }
+    const e = list[Math.floor(Math.random() * list.length)];
+    logEvent(e, auto, abs);
+    return { e, of: list.length };
+  }
+  // Called when moving the party spends travel time: one chance per 4 hours on the road, capped per in-game day.
+  function travelEvents(startAbs, minutes) {
+    const ev = data.events;
+    if (!editing || !ev.auto || minutes <= 0) return;
+    const s = evtState();
+    let carry = s.carry + minutes, t = startAbs - s.carry;
+    const hits = [];
+    while (carry >= 240) {
+      carry -= 240; t += 240;
+      const day = clockDay(t);
+      const used = num(s.perDay[day]) || 0;
+      if (used >= ev.maxPerDay) continue;
+      if (Math.random() * 100 >= ev.chance) continue;
+      s.perDay[day] = used + 1;
+      hits.push(t);
+    }
+    s.carry = carry;
+    const days = Object.keys(s.perDay).map(Number).sort((a, b) => b - a).slice(0, 10);
+    s.perDay = Object.fromEntries(days.map((d) => [d, s.perDay[d]]));
+    lsSet(EVT_KEY(), s);
+    hits.forEach((abs) => {
+      const r = rollEvent(true, abs);
+      if (r) toast(`Random event (#${r.e.n}) at ${clockLabel(abs)}: ${r.e.text}`, 'warn', 20000, () => { eventsTab = 'events'; showEvents(); });
+    });
+    if (hits.length && currentView === 'events') showEvents();
+  }
+  function showEvents(tab) {
+    if (tab) eventsTab = tab;
+    if (!editing) return;
+    currentView = 'events'; selectedId = null; setTab('events'); updateStatus(); popup.remove();
+    const b = body();
+    const seg = el('div', 'monster-tabs');
+    [['events', 'Random events'], ['weather', 'Weather']].forEach(([k, label]) => seg.appendChild(btn(label, 'small' + (eventsTab === k ? ' on' : ''), () => showEvents(k))));
+    b.appendChild(seg);
+    if (eventsTab === 'weather') { showWeatherPanel(b); return; }
+    const ev = data.events, list = parseEvents(ev.table), s = evtState();
+    // Roller
+    const out = el('div', 'evt-out');
+    const roll = btn(`🎲 Roll a random event (d${list.length || '?'})`, 'primary list-add', () => {
+      const r = rollEvent(false, clock ? clock.abs : null);
+      if (!r) return;
+      out.innerHTML = ''; out.appendChild(eventCard(r.e, `Rolled ${r.e.n} of ${r.of}`));
+      renderLogList();
+    });
+    roll.disabled = !list.length;
+    b.appendChild(roll);
+    b.appendChild(out);
+    // Travel rolls
+    const auto = el('div', 'evt-box');
+    auto.appendChild(el('h4', null, 'While the party travels'));
+    const ac = el('label', 'check'), acb = el('input');
+    acb.type = 'checkbox'; acb.checked = ev.auto;
+    acb.onchange = () => { ev.auto = acb.checked; changed(); showEvents(); };
+    ac.appendChild(acb); ac.appendChild(document.createTextNode(' Roll for an event every 4 hours of travel'));
+    auto.appendChild(ac);
+    if (ev.auto) {
+      const sl = el('input'); sl.type = 'range'; sl.min = '0'; sl.max = '100'; sl.step = '5'; sl.value = String(ev.chance);
+      const val = el('span', 'size-val', ev.chance + '%');
+      sl.oninput = () => { ev.chance = +sl.value; val.textContent = ev.chance + '%'; changed(); odds.textContent = oddsText(); };
+      const row = el('div', 'size-row'); row.appendChild(sl); row.appendChild(val);
+      const f = el('div', 'field', 'Chance each 4 hours'); f.appendChild(row); auto.appendChild(f);
+      auto.appendChild(field('Most events in one in-game day', selectInput([0, 1, 2, 3, 4, 6].map((n) => [String(n), String(n)]), String(ev.maxPerDay), (v) => { ev.maxPerDay = +v; changed(); odds.textContent = oddsText(); })));
+      const oddsText = () => {
+        // A full day on the road (three 4-hour stretches): how often do 0, 1, 2… events happen?
+        const p = ev.chance / 100, k = 3, cap = ev.maxPerDay;
+        const pr = [0, 1, 2, 3].map((x) => { let c = 1; for (let i = 0; i < x; i++) c = c * (k - i) / (i + 1); return c * Math.pow(p, x) * Math.pow(1 - p, k - x); });
+        const capped = [0, 1, 2, 3].map((x) => (x < cap ? pr[x] : x === cap ? pr.slice(cap).reduce((a, v) => a + v, 0) : 0));
+        return `Over 12 hours of travel: no event ${Math.round(capped[0] * 100)}% · one ${Math.round(capped[1] * 100)}%` + (cap >= 2 ? ` · two ${Math.round(capped[2] * 100)}%` : '') + (cap >= 3 ? ` · three ${Math.round(capped[3] * 100)}%` : '') + '.';
+      };
+      const odds = el('p', 'tip', oddsText());
+      auto.appendChild(odds);
+      const day = clock ? clockDay(clock.abs) : null;
+      if (day != null) {
+        const used = num(s.perDay[day]) || 0;
+        const r = el('div', 'btn-row');
+        r.appendChild(el('span', 'tip', `Day ${day}: ${used} of ${ev.maxPerDay} so far.`));
+        if (used) r.appendChild(btn('Reset today', 'small ghost', () => { const st = evtState(); delete st.perDay[day]; lsSet(EVT_KEY(), st); showEvents(); }));
+        auto.appendChild(r);
+      } else auto.appendChild(el('p', 'tip', 'Set the in-game clock and move the party token to have this roll for you.'));
+    }
+    b.appendChild(auto);
+    // Recent rolls (on this device)
+    const logBox = el('div');
+    const renderLogList = () => {
+      logBox.innerHTML = '';
+      const st = evtState();
+      if (!st.log.length) return;
+      logBox.appendChild(el('div', 'sub-h', 'Recent events'));
+      st.log.slice(0, 8).forEach((x) => logBox.appendChild(eventCard({ n: x.n, text: x.text, items: arr(x.items) }, (x.auto ? 'On the road' : 'Rolled') + (x.when ? ' · ' + x.when : ''))));
+      logBox.appendChild(btn('Clear the list', 'small ghost', () => { const st2 = evtState(); st2.log = []; lsSet(EVT_KEY(), st2); renderLogList(); }));
+    };
+    renderLogList();
+    b.appendChild(logBox);
+    // The table itself
+    const tb = el('details', 'evt-table');
+    tb.appendChild(el('summary', null, `Event table (${list.length} event${list.length === 1 ? '' : 's'})`));
+    tb.appendChild(el('p', 'tip', 'One per line, numbered like “12. …”. Lines starting with * belong to the event above. Only you see this.'));
+    const ta = textInput(ev.table, (v) => { ev.table = v; changed(); }, { multiline: true, rows: 14 });
+    ta.onchange = () => showEvents();
+    tb.appendChild(ta);
+    b.appendChild(tb);
+  }
+
+  // --- Weather: the DM picks it, everyone's map shows it live ---
+  const WEATHER = [
+    ['clear', [1, 3], 'Clear', 'No effect.'],
+    ['overcast', [4, 5], 'Overcast', 'No effect, but the light never gets past dusk.'],
+    ['drizzle', [6, 7], 'Light drizzle', 'Each character can fill a canteen.'],
+    ['rain', [8, 8], 'Heavy rain', 'Roads turn to mud: walking takes 1 hour longer per trip, and the car makes DC 12 Logic or gets stuck.'],
+    ['storm', [9, 9], 'Thunderstorm', 'No boat travel. On foot, a failed DC 12 Performance means one character takes 1d6 from debris.'],
+    ['fog', [10, 11], 'Thick fog', 'Sight drops to 30 feet, and Sense checks at range have disadvantage.'],
+    ['purple', [12, 12], 'Purple fog', 'The old fog rolls back in for the day. Everyone makes DC 12 Composure or loses 10 sanity, and creatures roam in daylight.']
+  ];
+  const WX_KEY = () => 'campaign-map.weather:' + SITE_KEY;
+  let weather = { k: 'clear', ts: 0 };
+  const wxOf = (k) => WEATHER.find((w) => w[0] === k) || WEATHER[0];
+  const cleanWeather = (w) => (w && WEATHER.some((x) => x[0] === w.k) ? { k: w.k, ts: num(w.ts) || 0, roll: num(w.roll) || null, auto: !!w.auto } : null);
+  function setWeather(k, roll) {
+    weather = { k, ts: Date.now(), roll: roll || null, auto: !!(weather && weather.auto) };
+    lsSet(WX_KEY(), weather);
+    if (relay && relay.connected) relay.publish(`${ROOM}/weather`, JSON.stringify(weather), { retain: true });
+    else toast('Can’t reach the live service right now, so players see the new weather once it reconnects.', 'warn', 6000);
+    applyWeather();
+    if (currentView === 'events' && eventsTab === 'weather') showEvents();
+  }
+  function rollWeather(note) {
+    const r = 1 + Math.floor(Math.random() * 12);
+    const w = WEATHER.find((x) => r >= x[1][0] && r <= x[1][1]);
+    setWeather(w[0], r);
+    if (note) toast(`${note} Rolled ${r} on the d12: ${w[2]}. ${w[3]}`, 'info', 12000, () => showEvents('weather'));
+    return r;
+  }
+  function onWeatherMessage(txt) {
+    let w = null;
+    try { w = txt ? cleanWeather(JSON.parse(txt)) : null; } catch (e) { return; }
+    if (!w) w = { k: 'clear', ts: 0 };
+    if (weather && w.ts && weather.ts && w.ts < weather.ts) return;
+    weather = Object.assign(w, { auto: editing ? !!(weather && weather.auto) : false });
+    applyWeather();
+    if (editing && currentView === 'events' && eventsTab === 'weather') showEvents();
+  }
+  function restoreWeather() {
+    setTimeout(() => {
+      if (!editing || weather.ts) return;
+      const saved = cleanWeather(lsGet(WX_KEY(), null));
+      if (saved) { weather = saved; setWeather(saved.k, saved.roll); }
+    }, 2600);
+  }
+  // A new in-game day can roll fresh weather.
+  function dailyWeather(days) {
+    if (!editing || days <= 0 || !weather.auto) return;
+    rollWeather(`A new day: the weather changes.`);
+  }
+  function showWeatherPanel(b) {
+    const cur = wxOf(weather.k);
+    const now = el('div', 'wx-now wx-' + cur[0]);
+    now.appendChild(el('div', 'wx-now-name', cur[2] + (weather.roll ? ` (rolled ${weather.roll})` : '')));
+    now.appendChild(el('p', null, cur[3]));
+    b.appendChild(now);
+    b.appendChild(btn('🎲 Roll the weather (d12)', 'primary list-add', () => rollWeather()));
+    b.appendChild(el('p', 'tip', 'Or pick one. It shows on every player’s map right away: rain, storms and fog over the map, and purple fog turns the fog purple.'));
+    const grid = el('div', 'wx-grid');
+    WEATHER.forEach(([k, [lo, hi], name, effect]) => {
+      const x = el('button', 'wx-opt wx-' + k + (k === weather.k ? ' on' : ''));
+      x.type = 'button';
+      x.appendChild(el('span', 'wx-roll', lo === hi ? String(lo) : `${lo}–${hi}`));
+      x.appendChild(el('b', null, name));
+      x.appendChild(el('span', 'wx-eff', effect));
+      x.onclick = () => setWeather(k);
+      grid.appendChild(x);
+    });
+    b.appendChild(grid);
+    const ac = el('label', 'check'), acb = el('input');
+    acb.type = 'checkbox'; acb.checked = !!weather.auto;
+    acb.onchange = () => { weather.auto = acb.checked; lsSet(WX_KEY(), weather); };
+    ac.appendChild(acb); ac.appendChild(document.createTextNode(' Roll new weather each in-game day (at 8 AM)'));
+    b.appendChild(ac);
+  }
+
+  // Drawing the weather over the map (players and DM). Rain is a canvas of streaks; fog and gloom are washes.
+  const wx = { canvas: null, wash: null, flash: null, mist: null, drops: [], raf: 0, kind: '', lastBolt: 0 };
+  const WX_LOOK = {
+    clear: { wash: 0, drops: 0 },
+    overcast: { wash: 0.22, washColor: '40,45,58', drops: 0 },
+    drizzle: { wash: 0.12, washColor: '40,48,60', drops: 110, speed: 9, len: 9, alpha: 0.28 },
+    rain: { wash: 0.26, washColor: '25,30,42', drops: 420, speed: 17, len: 18, alpha: 0.38 },
+    storm: { wash: 0.36, washColor: '14,16,26', drops: 650, speed: 22, len: 22, alpha: 0.42, bolts: true },
+    fog: { wash: 0, drops: 0, mist: 'rgba(205,210,215,', mistA: 0.62 },
+    purple: { wash: 0.14, washColor: '40,10,60', drops: 0, mist: 'rgba(150,80,210,', mistA: 0.5, tint: '#7b3fd1' }
+  };
+  function wxLayer(cls) { const d = el('div', 'wx-layer ' + cls); map.getContainer().appendChild(d); return d; }
+  function applyWeather() {
+    if (!map || !styleReady) return; // the map's 'load' handler draws it once ready
+    const k = weather ? weather.k : 'clear', L = WX_LOOK[k] || WX_LOOK.clear;
+    if (!wx.wash) {
+      wx.wash = wxLayer('wx-wash'); wx.mist = wxLayer('wx-mist'); wx.flash = wxLayer('wx-flash');
+      wx.canvas = el('canvas', 'wx-layer wx-rain'); map.getContainer().appendChild(wx.canvas);
+    }
+    const dim = editing ? 0.5 : 1; // the DM still needs to see the map
+    wx.wash.style.background = L.wash ? `rgba(${L.washColor},${(L.wash * dim).toFixed(3)})` : 'transparent';
+    wx.mist.style.opacity = L.mist ? String(L.mistA * dim) : '0';
+    wx.mist.classList.toggle('on', !!L.mist);
+    wx.mist.classList.toggle('purple', k === 'purple');
+    const tintChanged = (wx.kind === 'purple') !== (k === 'purple');
+    wx.kind = k;
+    if (tintChanged) applyFogLook(); // purple fog tints the map's fog too
+    cancelAnimationFrame(wx.raf);
+    const ctx = wx.canvas.getContext('2d');
+    if (!L.drops) { ctx.clearRect(0, 0, wx.canvas.width, wx.canvas.height); wx.canvas.style.display = 'none'; return; }
+    wx.canvas.style.display = '';
+    const fit = () => {
+      const r = map.getContainer().getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+      if (wx.canvas.width !== Math.round(r.width * dpr)) { wx.canvas.width = Math.round(r.width * dpr); wx.canvas.height = Math.round(r.height * dpr); }
+      return dpr;
+    };
+    let dpr = fit();
+    const W = () => wx.canvas.width, H = () => wx.canvas.height;
+    wx.drops = Array.from({ length: L.drops }, () => ({ x: Math.random() * W(), y: Math.random() * H(), v: 0.7 + Math.random() * 0.6 }));
+    let last = performance.now();
+    const tick = (now) => {
+      wx.raf = requestAnimationFrame(tick);
+      if (document.hidden) return;
+      const dt = Math.min(3, (now - last) / 16.7); last = now;
+      if (Math.random() < 0.01) dpr = fit();
+      ctx.clearRect(0, 0, W(), H());
+      ctx.strokeStyle = `rgba(200,215,235,${L.alpha * dim})`;
+      ctx.lineWidth = 1.1 * dpr;
+      ctx.beginPath();
+      const dx = -0.18;
+      for (const d of wx.drops) {
+        const sp = L.speed * d.v * dpr * dt;
+        d.y += sp; d.x += sp * dx;
+        if (d.y > H()) { d.y = -L.len * dpr; d.x = Math.random() * W() * 1.1; }
+        if (d.x < 0) d.x += W();
+        ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - L.len * dpr * dx, d.y - L.len * dpr * d.v);
+      }
+      ctx.stroke();
+      if (L.bolts && now - wx.lastBolt > 4000 && Math.random() < 0.004 * dt) {
+        wx.lastBolt = now;
+        wx.flash.classList.remove('bolt'); void wx.flash.offsetWidth; wx.flash.classList.add('bolt');
+      }
+    };
+    wx.raf = requestAnimationFrame(tick);
+  }
+  // The fog look with the weather's tint on top (purple fog).
+  function fogStyleNow() {
+    const L = WX_LOOK[weather && weather.k];
+    return L && L.tint ? Object.assign({}, data.fogStyle, { tint: L.tint, darkness: Math.min(0.75, data.fogStyle.darkness) }) : data.fogStyle;
   }
 
   // --- Fog brush: drag a circle over the map to paint or erase fog ---
