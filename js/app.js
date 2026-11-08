@@ -98,6 +98,17 @@
     boat: { name: 'By boat', miles: [20, 30, 40] }
   };
   const PACES = [['Average', 8], ['Brisk', 10], ['Non-stop', 14]]; // [name, hours on the move]
+  // DM-only terrain view: [id, name, colour, landuse kinds, travel note].
+  const TERRAIN = [
+    ['swamp', 'Swamp & marsh', '#14b8a6', ['wetland'], 'Half speed on foot; no cars. Boats only in deep channels.'],
+    ['woods', 'Woods & forest', '#22c55e', ['wood', 'forest', 'nature_reserve'], 'Half speed on foot; no cars.'],
+    ['fields', 'Fields & open ground', '#bef264', ['grass', 'grassland', 'meadow', 'scrub', 'heath', 'farmland', 'orchard', 'vineyard', 'park', 'golf_course', 'recreation_ground', 'garden', 'cemetery', 'dog_park', 'pitch'], 'Normal speed on foot.'],
+    ['town', 'Town & city', '#f59e0b', ['residential', 'commercial', 'retail', 'school', 'college', 'university', 'hospital', 'pedestrian', 'military', 'aerodrome'], 'Roads, people, shelter and supplies.'],
+    ['industry', 'Industry & docks', '#f43f5e', ['industrial', 'railway', 'runway'], 'Factories, rail yards, warehouses.'],
+    ['sand', 'Beach & sand', '#fde68a', ['beach', 'sand'], 'Slow going on foot.'],
+    ['water', 'Water', '#3b82f6', [], 'Boat only.']
+  ];
+  const TERRAIN_KEY = 'campaign-map.terrainView';
   const TRAVEL_SCALE_DEFAULT = 4; // crossing the map on foot takes about 17 days
   // Fog styles. base/wisp: [noise frequency, layers of detail, ridged (streaky)].
   const FOG_LOOKS = {
@@ -434,6 +445,9 @@
       { id: 'fog-edge', type: 'line', source: 'fog-soft', filter: ['==', ['get', 'active'], true], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#1c1c21', 'line-width': 34, 'line-blur': 28, 'line-opacity': 0.9 } },
       { id: 'fog-fill', type: 'fill', source: 'fog', filter: ['==', ['get', 'fill'], true], paint: { 'fill-pattern': 'fog-tex', 'fill-opacity': 0.98 } },
       { id: 'fog-wisp', type: 'fill', source: 'fog', filter: ['==', ['get', 'fill'], true], paint: { 'fill-pattern': 'fog-wisp', 'fill-opacity': 1, 'fill-opacity-transition': { duration: 0, delay: 0 } } },
+      ...TERRAIN.map(([id, , color, k]) => (id === 'water'
+        ? { id: 'terrain-water', type: 'fill', source: 'base', 'source-layer': 'water', filter: ['==', ['geometry-type'], 'Polygon'], layout: { visibility: 'none' }, paint: { 'fill-color': color, 'fill-opacity': 0.35 } }
+        : { id: 'terrain-' + id, type: 'fill', source: 'base', 'source-layer': 'landuse', filter: ['in', ['get', 'kind'], ['literal', k]], layout: { visibility: 'none' }, paint: { 'fill-color': color, 'fill-opacity': 0.5, 'fill-outline-color': color } })),
       { id: 'daylight', type: 'fill', source: 'daylight', paint: { 'fill-color': '#000', 'fill-opacity': 0, 'fill-opacity-transition': { duration: 1500, delay: 0 }, 'fill-color-transition': { duration: 1500, delay: 0 } } },
       { id: 'fog-line', type: 'line', source: 'fog', filter: ['==', ['get', 'outline'], true], layout: { visibility: 'none', 'line-join': 'round' }, paint: { 'line-color': '#c9c3b5', 'line-width': 1.5, 'line-dasharray': [2, 2], 'line-opacity': ['case', ['get', 'active'], 0.8, 0.4] } }
     );
@@ -516,7 +530,7 @@
       } catch (e) { shown = false; setTimeout(showBase, 200); }
     };
     map.on('sourcedata', (e) => { if (e.sourceId === 'fog' && map.isSourceLoaded('fog')) requestAnimationFrame(showBase); });
-    map.on('load', () => { styleReady = true; fitSize(); renderFog(); renderRegions(); renderClock(); setTimeout(showBase, 3000); });
+    map.on('load', () => { styleReady = true; fitSize(); renderFog(); renderRegions(); renderClock(); applyTerrain(); setTimeout(showBase, 3000); });
     map.on('styleimagemissing', (e) => { if ((e.id === 'fog-tex' || e.id === 'fog-wisp') && !map.hasImage(e.id)) { buildFogLook(); pushFogImages(); startFogAnim(); } });
     if (window.ResizeObserver) new ResizeObserver(() => fitSize()).observe(map.getContainer());
     lockZoom();
@@ -2919,6 +2933,7 @@
     if (relay && relay.connected) relay.subscribe([`${ROOM}/abilities/+`, `${ROOM}/sheet/+`, `${ROOM}/vitals/+`]);
     renderPartyToken(false);
     restorePartyPos(); restoreClock(); renderClock();
+    applyTerrain();
   }
 
   function exitEdit() {
@@ -2936,6 +2951,7 @@
     announce(); renderParty(); renderDice(); renderSoundCtl();
     renderPartyToken(false);
     clockOpen = false; renderClock();
+    applyTerrain();
     if (hadChanges) toast('Your unpublished changes are saved on this device. Open #edit again to finish and publish.', 'info', 7000);
   }
 
@@ -4008,6 +4024,40 @@
     return p;
   }
 
+  // --- Terrain view (DM only): colour the map by swamp, woods, fields, town… ---
+  let terrainOn = !!lsGet(TERRAIN_KEY, false);
+  function applyTerrain() {
+    const on = editing && terrainOn;
+    if (styleReady) TERRAIN.forEach(([id]) => { try { map.setLayoutProperty('terrain-' + id, 'visibility', on ? 'visible' : 'none'); } catch (e) { /* not ready */ } });
+    let lg = $('#terrain-legend');
+    if (!on) { if (lg) lg.remove(); return; }
+    if (!lg) { lg = el('div'); lg.id = 'terrain-legend'; map.getContainer().appendChild(lg); }
+    lg.innerHTML = '';
+    const head = el('div', 'tl-head');
+    head.appendChild(el('b', null, 'Terrain'));
+    head.appendChild(el('span', 'tl-sub', 'Only you see this'));
+    const x = btn('×', 'small ghost tl-close', () => setTerrain(false));
+    x.title = 'Hide terrain';
+    head.appendChild(x);
+    lg.appendChild(head);
+    TERRAIN.forEach(([, name, color, , note]) => {
+      const r = el('div', 'tl-row');
+      const sw = el('span', 'tl-sw'); sw.style.background = color;
+      r.appendChild(sw);
+      const txt = el('div');
+      txt.appendChild(el('div', 'tl-name', name));
+      txt.appendChild(el('div', 'tl-note', note));
+      r.appendChild(txt);
+      lg.appendChild(r);
+    });
+  }
+  function setTerrain(on) {
+    terrainOn = on;
+    lsSet(TERRAIN_KEY, on);
+    applyTerrain();
+    if (currentView === 'ruler') showRuler();
+  }
+
   // --- Ruler: measure a route and see how long the party takes ---
   const ruler = { active: false, points: [], hover: null, mode: 'foot', pace: 0, labels: [] };
   const RULER_PREF = 'campaign-map.ruler';
@@ -4138,6 +4188,7 @@
       items.forEach(([k, label]) => row.appendChild(btn(label, 'small' + (k === cur ? ' on' : ''), () => onPick(k))));
       return row;
     };
+    b.appendChild(btn(terrainOn ? 'Hide terrain' : 'Show terrain (swamps, woods, towns…)', 'small' + (terrainOn ? ' on' : ''), () => setTerrain(!terrainOn)));
     b.appendChild(el('div', 'sub-h', 'How are they travelling?'));
     b.appendChild(seg(Object.entries(TRAVEL).map(([k, v]) => [k, v.name]), ruler.mode, (k) => { ruler.mode = k; lsSet(RULER_PREF, { mode: ruler.mode, pace: ruler.pace }); drawRuler(); showRuler(); }));
     b.appendChild(el('div', 'sub-h', 'Pace'));
