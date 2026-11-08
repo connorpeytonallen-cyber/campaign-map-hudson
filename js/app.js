@@ -446,8 +446,8 @@
       { id: 'fog-fill', type: 'fill', source: 'fog', filter: ['==', ['get', 'fill'], true], paint: { 'fill-pattern': 'fog-tex', 'fill-opacity': 0.98 } },
       { id: 'fog-wisp', type: 'fill', source: 'fog', filter: ['==', ['get', 'fill'], true], paint: { 'fill-pattern': 'fog-wisp', 'fill-opacity': 1, 'fill-opacity-transition': { duration: 0, delay: 0 } } },
       ...TERRAIN.map(([id, , color, k]) => (id === 'water'
-        ? { id: 'terrain-water', type: 'fill', source: 'base', 'source-layer': 'water', filter: ['==', ['geometry-type'], 'Polygon'], layout: { visibility: 'none' }, paint: { 'fill-color': color, 'fill-opacity': 0.35 } }
-        : { id: 'terrain-' + id, type: 'fill', source: 'base', 'source-layer': 'landuse', filter: ['in', ['get', 'kind'], ['literal', k]], layout: { visibility: 'none' }, paint: { 'fill-color': color, 'fill-opacity': 0.5, 'fill-outline-color': color } })),
+        ? { id: 'terrain-water', type: 'fill', source: 'base', 'source-layer': 'water', filter: ['==', ['geometry-type'], 'Polygon'], layout: { visibility: 'none' }, paint: { 'fill-color': color, 'fill-opacity': 0 } }
+        : { id: 'terrain-' + id, type: 'fill', source: 'base', 'source-layer': 'landuse', filter: ['in', ['get', 'kind'], ['literal', k]], layout: { visibility: 'none' }, paint: { 'fill-color': color, 'fill-opacity': 0, 'fill-outline-color': 'rgba(0,0,0,0)' } })),
       { id: 'daylight', type: 'fill', source: 'daylight', paint: { 'fill-color': '#000', 'fill-opacity': 0, 'fill-opacity-transition': { duration: 1500, delay: 0 }, 'fill-color-transition': { duration: 1500, delay: 0 } } },
       { id: 'fog-line', type: 'line', source: 'fog', filter: ['==', ['get', 'outline'], true], layout: { visibility: 'none', 'line-join': 'round' }, paint: { 'line-color': '#c9c3b5', 'line-width': 1.5, 'line-dasharray': [2, 2], 'line-opacity': ['case', ['get', 'active'], 0.8, 0.4] } }
     );
@@ -462,9 +462,11 @@
       { id: 'draft-pts', type: 'circle', source: 'draft', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 5, 'circle-color': '#e8b04a', 'circle-stroke-color': '#000', 'circle-stroke-width': 1.5 } }
     );
     // Start with only fog showing (see init): streets are switched on once the fog is in place.
-    BASE_IDS = layers.filter((l) => l.source === 'base').map((l) => l.id);
+    // (The DM's terrain colours share this map data but are never part of what players see.)
+    const isBase = (l) => l.source === 'base' && !l.id.startsWith('terrain-');
+    BASE_IDS = layers.filter(isBase).map((l) => l.id);
     for (const l of layers) {
-      if (l.source === 'base') l.layout = Object.assign({}, l.layout, { visibility: 'none' });
+      if (isBase(l)) l.layout = Object.assign({}, l.layout, { visibility: 'none' });
       if (l.id === 'land') l.paint = Object.assign({}, l.paint, { 'background-pattern': 'fog-tex' });
     }
     // Region outlines go under the fog; the drawing preview stays on top of everything.
@@ -4028,13 +4030,18 @@
 
   // --- Terrain view (DM only): colour the map by swamp, woods, fields, town… ---
   let terrainOn = !!lsGet(TERRAIN_KEY, false);
+  // Terrain types you've switched off in the legend (they still count for travel times).
+  const TERRAIN_HIDDEN_KEY = 'campaign-map.terrainHidden';
+  const terrainHidden = new Set(arr(lsGet(TERRAIN_HIDDEN_KEY, [])));
   function applyTerrain() {
     const on = editing && terrainOn;
     // While you edit, the terrain layers stay on the map (invisible when the view is off) so travel can read them.
     if (styleReady) TERRAIN.forEach(([id]) => {
       try {
         map.setLayoutProperty('terrain-' + id, 'visibility', editing ? 'visible' : 'none');
-        map.setPaintProperty('terrain-' + id, 'fill-opacity', on ? (id === 'water' ? 0.35 : 0.5) : 0);
+        const show = on && !terrainHidden.has(id);
+        map.setPaintProperty('terrain-' + id, 'fill-opacity', show ? (id === 'water' ? 0.35 : 0.5) : 0);
+        if (id !== 'water') map.setPaintProperty('terrain-' + id, 'fill-outline-color', show ? TERRAIN.find((x) => x[0] === id)[2] : 'rgba(0,0,0,0)');
       } catch (e) { /* not ready */ }
     });
     let lg = $('#terrain-legend');
@@ -4043,14 +4050,18 @@
     lg.innerHTML = '';
     const head = el('div', 'tl-head');
     head.appendChild(el('b', null, 'Terrain'));
-    head.appendChild(el('span', 'tl-sub', 'Only you see this'));
+    head.appendChild(el('span', 'tl-sub', 'Only you see this · click to hide or show'));
     const x = btn('×', 'small ghost tl-close', () => setTerrain(false));
     x.title = 'Hide terrain';
     head.appendChild(x);
     lg.appendChild(head);
-    TERRAIN.forEach(([, name, color, , note]) => {
-      const r = el('div', 'tl-row');
-      const sw = el('span', 'tl-sw'); sw.style.background = color;
+    TERRAIN.forEach(([id, name, color, , note]) => {
+      const r = el('button', 'tl-row' + (terrainHidden.has(id) ? ' off' : ''));
+      r.type = 'button';
+      r.title = terrainHidden.has(id) ? 'Click to show' : 'Click to hide';
+      r.setAttribute('aria-pressed', String(!terrainHidden.has(id)));
+      r.onclick = () => { if (terrainHidden.has(id)) terrainHidden.delete(id); else terrainHidden.add(id); lsSet(TERRAIN_HIDDEN_KEY, [...terrainHidden]); applyTerrain(); };
+      const sw = el('span', 'tl-sw'); sw.style.background = color; sw.style.borderColor = color;
       r.appendChild(sw);
       const txt = el('div');
       txt.appendChild(el('div', 'tl-name', name));

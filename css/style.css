@@ -535,8 +535,14 @@ body.editing .party-token { cursor: grab; }
 .tl-head { display: flex; align-items: center; gap: 8px; }
 .tl-head b { font-size: 13px; }
 .tl-sub { color: #8f8a80; font-size: 11px; }
+#terrain-legend { gap: 2px; }
+.tl-head { margin-bottom: 4px; }
 .tl-close { margin-left: auto; padding: 0 7px; }
-.tl-row { display: flex; gap: 9px; align-items: flex-start; }
+.tl-row { display: flex; gap: 9px; align-items: flex-start; width: 100%; padding: 4px 6px; margin: 0 -6px; border: 0; border-radius: 7px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.tl-row:hover { background: #222227; }
+.tl-row.off { opacity: .45; }
+.tl-row.off .tl-sw { background: transparent !important; }
+.tl-row.off .tl-name { text-decoration: line-through; }
 .tl-sw { flex: none; width: 14px; height: 14px; margin-top: 1px; border-radius: 4px; border: 1px solid rgba(255, 255, 255, .25); }
 .tl-name { font-weight: 600; }
 .tl-note { color: #9a958b; font-size: 11px; }
