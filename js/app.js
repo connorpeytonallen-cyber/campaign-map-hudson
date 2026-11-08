@@ -2755,19 +2755,6 @@
     const set = (k) => (nv) => { const cur = myVitals(); cur[k] = nv; publishVitals(me.id, cur); renderLog(); };
     body.appendChild(vitalMeter('sanity', v.sanity, set('sanity')));
     body.appendChild(vitalMeter('hunger', v.hunger, set('hunger')));
-    const guide = el('div', 'vit-guide');
-    [['Sanity', SANITY_TIERS], ['Hunger', HUNGER_TIERS]].forEach(([title, tiers]) => {
-      guide.appendChild(el('div', 'cs-h', title + ' levels'));
-      tiers.forEach(([min, name, effect], i) => {
-        const r = el('div', 'vit-row');
-        const max = i ? tiers[i - 1][0] - 1 : 100;
-        const n = el('b', null, `${name} (${min}–${max}%)`); n.style.color = TIER_COLORS[i];
-        r.appendChild(n); r.appendChild(el('span', null, effect));
-        guide.appendChild(r);
-      });
-    });
-    body.appendChild(guide);
-    body.appendChild(el('p', 'meta', `Food drops ${DAILY_FOOD}% at the start of each in-game day. Going without sleep costs ${NO_SLEEP}% sanity. Your DM can also change these.`));
   }
   // The DM's table of everyone's levels (Characters tab).
   function vitalsTable() {
@@ -3860,7 +3847,7 @@
     if (!visible) { if (partyMarker) { partyMarker.remove(); partyMarker = null; } return; }
     if (!partyMarker) {
       const elx = el('div', 'party-token');
-      elx.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2a1 1 0 0 1 1 1v1.1A5 5 0 0 1 17 9v7l1.6 2.2A1 1 0 0 1 17.8 20H6.2a1 1 0 0 1-.8-1.8L7 16V9a5 5 0 0 1 4-4.9V3a1 1 0 0 1 1-1zm0 6.2c-.9 1.2-2 2.4-2 3.8a2 2 0 0 0 4 0c0-1.4-1.1-2.6-2-3.8zM9.5 21h5a2.5 2.5 0 0 1-5 0z"/></svg><span class="party-token-label">The party</span>';
+      elx.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2a1 1 0 0 1 1 1v1.1A5 5 0 0 1 17 9v7l1.6 2.2A1 1 0 0 1 17.8 20H6.2a1 1 0 0 1-.8-1.8L7 16V9a5 5 0 0 1 4-4.9V3a1 1 0 0 1 1-1zm0 6.2c-.9 1.2-2 2.4-2 3.8a2 2 0 0 0 4 0c0-1.4-1.1-2.6-2-3.8zM9.5 21h5a2.5 2.5 0 0 1-5 0z"/></svg>';
       elx.title = 'The party';
       partyMarker = new maplibregl.Marker({ element: elx, anchor: 'center' }).setLngLat([partyPos.lng, partyPos.lat]).addTo(map);
       partyMarker.on('dragstart', () => { partyDragging = true; partyDragFrom = partyPos ? [partyPos.lng, partyPos.lat] : null; });
