@@ -160,7 +160,7 @@ body.editing .region-label:hover { outline: 1px dashed rgba(255, 255, 255, .5); 
 .pin.in-fog svg { opacity: .7; filter: blur(.6px) grayscale(.8) brightness(.85) drop-shadow(0 0 6px rgba(200, 200, 215, .35)); }
 .pin.in-fog .pin-label { opacity: .85; font-style: italic; }
 .pin.pin-mystery svg { filter: drop-shadow(0 0 5px rgba(232, 226, 208, .35)); }
-.pin.pin-mystery-dm::after { content: '???'; position: absolute; top: 37%; left: 50%; transform: translate(-50%, -50%); white-space: nowrap; padding: 1px 4px; border-radius: 6px; background: #2a2a30; color: #e8e2d0; font: 700 10px/1.2 Georgia, serif; border: 1px solid rgba(232, 226, 208, .5); pointer-events: none; }
+.pin.pin-mystery-dm::after { content: '???'; position: absolute; top: -6px; right: -10px; padding: 1px 4px; border-radius: 6px; background: #2a2a30; color: #e8e2d0; font: 700 10px/1.2 Georgia, serif; border: 1px solid rgba(232, 226, 208, .5); pointer-events: none; }
 .form-foot + .tip { margin-top: 12px; }
 body.editing .sticker { pointer-events: auto; cursor: grab; }
 body.editing .sticker:hover, .sticker.selected { outline: 1px dashed rgba(232, 176, 74, .8); outline-offset: 2px; }
@@ -648,3 +648,16 @@ body.editing .party-token { cursor: grab; }
     radial-gradient(50% 35% at 85% 10%, rgba(110, 50, 180, .7), transparent 70%);
   background-size: 160% 160%; }.sound-target-on select { border-color: var(--accent); }
 .sound-row.private .sound-play::after { content: ' (1)'; font-size: 11px; opacity: .8; }
+/* Logbook: centred text for players */
+#logbook .sheet-head { position: relative; justify-content: center; }
+#logbook .sheet-head .sheet-close { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); }
+#logbook .sheet-scroll { text-align: center; }
+#logbook .sheet-scroll input:not([type=checkbox]):not([type=range]), #logbook .sheet-scroll select { text-align: center; text-align-last: center; }
+#logbook .sheet-scroll textarea { text-align: left; }
+#logbook .log-fold > summary { justify-content: center; }
+#logbook .log-fold-name { flex: 0 1 auto; }
+/* Moving clouds panel */
+.wx-clouds { margin: 12px 0; }
+.wx-clouds .monster-tabs { margin-bottom: 8px; }
+.wx-party { margin: 8px 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: rgba(255, 255, 255, .03); font: 500 13px var(--ui); color: var(--text); }
+.wx-party.wet { border-color: #4a6a8a; background: rgba(70, 110, 150, .15); }

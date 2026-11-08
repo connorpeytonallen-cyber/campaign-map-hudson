@@ -4474,6 +4474,7 @@
     if (prev && editing) travelClock(prev, [partyPos.lng, partyPos.lat]);
     sendPartyPos();
     renderPartyToken(false);
+    checkPartyWeather(true);
   }
   function onPartyPosMessage(txt) {
     const p = txt ? cleanPartyPos(JSON.parse(txt)) : null;
@@ -4581,9 +4582,11 @@
       left -= step; abs += 10;
     }
     // Weather: mud adds an hour on foot; storms keep boats in.
+    // With moving clouds it only counts if the party starts or ends the trip under them.
     let wnote = '';
-    if (weather.k === 'rain' && partyTravel.mode === 'foot') { abs += 60; wnote = ' Heavy rain: +1 hour in the mud.'; }
-    if (weather.k === 'storm' && partyTravel.mode === 'boat') wnote = ' Thunderstorm: boats shouldn’t be out!';
+    const wa = weatherAt(fromLL), wb = weatherAt(toLL), wet = (k) => wa === k || wb === k;
+    if (wet('rain') && partyTravel.mode === 'foot') { abs += 60; wnote = ' Heavy rain: +1 hour in the mud.'; }
+    if (wet('storm') && partyTravel.mode === 'boat') wnote = ' Thunderstorm: boats shouldn’t be out!';
     const spent = abs - clock.abs;
     const startAbs = clock.abs;
     setClock(abs, `${TRAVEL[partyTravel.mode].name}, ${PACES[partyTravel.pace][0].toLowerCase()}: ${fmtMi(t.travelMi)} miles took ${fmtDuration(spent / 60, 24)}. It’s now ${fmtClock(clockTod(abs))}, Day ${clockDay(abs)}.${tnote ? ' ' + tnote : ''}${wnote}`);
@@ -5344,7 +5347,57 @@
   const WX_KEY = () => 'campaign-map.weather:' + SITE_KEY;
   let weather = { k: 'clear', ts: 0 };
   const wxOf = (k) => WEATHER.find((w) => w[0] === k) || WEATHER[0];
-  const cleanWeather = (w) => (w && WEATHER.some((x) => x[0] === w.k) ? { k: w.k, ts: num(w.ts) || 0, roll: num(w.roll) || null, auto: !!w.auto } : null);
+  const cleanWeather = (w) => (w && WEATHER.some((x) => x[0] === w.k) ? { k: w.k, ts: num(w.ts) || 0, roll: num(w.roll) || null, auto: !!w.auto, seed: Math.round(num(w.seed) || 1), spread: w.spread === 'whole' ? 'whole' : 'moving' } : null);
+  // --- Moving clouds: rain, drizzle and storms come as drifting cloud cells instead of covering the whole map.
+  // Every screen works out the same clouds from the seed and the time the weather started, so they stay in sync.
+  const PATCHY = { drizzle: { n: 7, r: [0.05, 0.085] }, rain: { n: 6, r: [0.06, 0.1] }, storm: { n: 4, r: [0.07, 0.11] } };
+  const isPatchy = (w) => !!(w && PATCHY[w.k] && w.spread !== 'whole');
+  const LAT_K = Math.cos(32.8 * Math.PI / 180);
+  const WX_BOX = (() => { const [[w, s], [e, n]] = LOCK_BOUNDS, mx = (e - w) * 0.3, my = (n - s) * 0.3; return { w: w - mx, s: s - my, W: e - w + 2 * mx, H: n - s + 2 * my, mapW: e - w }; })();
+  const CLOUD_CROSS_MIN = 35; // real minutes for a cloud to drift across the map and back round
+  function seeded(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  const wrapTo = (v, lo, size) => ((((v - lo) % size) + size) % size) + lo;
+  // The cloud blobs right now: [{lng, lat, r}] with r in degrees of longitude.
+  function cloudBlobs(w, now) {
+    const P = w && PATCHY[w.k];
+    if (!P) return [];
+    const R = seeded(w.seed || 1), ang = R() * Math.PI * 2, sp = WX_BOX.W / (CLOUD_CROSS_MIN * 60000);
+    const el = Math.max(0, now - (w.ts || now)), out = [];
+    for (let i = 0; i < P.n; i++) {
+      const bx = WX_BOX.w + R() * WX_BOX.W, by = WX_BOX.s + R() * WX_BOX.H, v = 0.8 + R() * 0.4;
+      const r = (P.r[0] + R() * (P.r[1] - P.r[0])) * WX_BOX.mapW;
+      const cx = wrapTo(bx + Math.cos(ang) * sp * v * el, WX_BOX.w, WX_BOX.W), cy = wrapTo(by + Math.sin(ang) * sp * v * el * LAT_K, WX_BOX.s, WX_BOX.H);
+      const parts = 3 + Math.floor(R() * 3);
+      for (let j = 0; j < parts; j++) {
+        const a = R() * Math.PI * 2, d = R() * r * 0.6;
+        out.push({ lng: cx + Math.cos(a) * d, lat: cy + Math.sin(a) * d * LAT_K, r: r * (0.5 + R() * 0.35) });
+      }
+    }
+    return out;
+  }
+  function underCloud(lng, lat, w, now) {
+    return cloudBlobs(w || weather, now || Date.now()).some((b) => { const dx = lng - b.lng, dy = (lat - b.lat) / LAT_K; return dx * dx + dy * dy < (b.r * 0.85) * (b.r * 0.85); });
+  }
+  // The weather at one spot: with moving clouds, outside them it's just overcast.
+  function weatherAt(ll) {
+    const k = weather ? weather.k : 'clear';
+    if (!isPatchy(weather) || !ll) return k;
+    return underCloud(ll[0], ll[1]) ? k : 'overcast';
+  }
+  const partyWeather = () => weatherAt(partyPos ? [partyPos.lng, partyPos.lat] : null);
+  let lastPartyWx = '';
+  // The DM's screen keeps the weather sound matched to where the party is as the clouds drift.
+  function checkPartyWeather(announce) {
+    if (!editing || !weather) return;
+    const k = partyWeather();
+    if (k === lastPartyWx) return;
+    const was = lastPartyWx;
+    if (!was) { lastPartyWx = k; return; } // just opened the editor: don't restart sounds
+    playWeatherSound(k);
+    if (announce && was && isPatchy(weather)) toast(k === 'overcast' ? `The ${wxOf(weather.k)[2].toLowerCase()} moves off. The party is out of it.` : `${wxOf(k)[2]} reaches the party.`, 'info', 8000, () => showEvents('weather'));
+    if (currentView === 'events' && eventsTab === 'weather') showEvents();
+  }
+  setInterval(() => checkPartyWeather(true), 15000);
   // Weather sounds: each weather can start an ambience loop for everyone, and stops the last one.
   const WX_SOUND_GUESS = {
     clear: [/calm/i],
@@ -5368,6 +5421,7 @@
   }
   let wxSoundId = '';
   function playWeatherSound(k) {
+    lastPartyWx = k;
     if (!editing || !data.weatherSounds.auto) return;
     const s = weatherSound(k);
     if (wxSoundId && (!s || s.id !== wxSoundId) && activeLoopIds.has(wxSoundId)) { const old = soundById(wxSoundId); if (old) dmStop(old); }
@@ -5378,12 +5432,13 @@
     dmPlay(s);
     soundTarget = keep;
   }
-  function setWeather(k, roll, quiet) {
-    weather = { k, ts: Date.now(), roll: roll || null, auto: !!(weather && weather.auto) };
+  function setWeather(k, roll, quiet, keep) {
+    const prev = weather || {};
+    weather = { k, ts: keep ? prev.ts || Date.now() : Date.now(), roll: roll || null, auto: !!prev.auto, seed: keep && prev.seed ? prev.seed : 1 + Math.floor(Math.random() * 1e9), spread: prev.spread === 'whole' ? 'whole' : 'moving' };
     lsSet(WX_KEY(), weather);
     if (relay && relay.connected) relay.publish(`${ROOM}/weather`, JSON.stringify(weather), { retain: true });
     else toast('Can’t reach the live service right now, so players see the new weather once it reconnects.', 'warn', 6000);
-    if (!quiet) playWeatherSound(k);
+    if (!quiet) playWeatherSound(partyWeather()); else lastPartyWx = partyWeather();
     applyWeather();
     if (currentView === 'events' && eventsTab === 'weather') showEvents();
   }
@@ -5407,7 +5462,7 @@
     setTimeout(() => {
       if (!editing || weather.ts) return;
       const saved = cleanWeather(lsGet(WX_KEY(), null));
-      if (saved) { weather = saved; setWeather(saved.k, saved.roll, true); }
+      if (saved) { weather = saved; setWeather(saved.k, saved.roll, true, true); }
     }, 2600);
   }
   // A new in-game day can roll fresh weather.
@@ -5434,6 +5489,21 @@
       grid.appendChild(x);
     });
     b.appendChild(grid);
+    // Moving clouds (rain, drizzle, storms)
+    if (PATCHY[weather.k]) {
+      const mc = el('div', 'wx-clouds');
+      mc.appendChild(el('div', 'sub-h', 'Where it falls'));
+      const seg = el('div', 'monster-tabs');
+      [['moving', 'Moving clouds'], ['whole', 'Whole map']].forEach(([k, label]) => seg.appendChild(btn(label, 'small' + ((weather.spread || 'moving') === k ? ' on' : ''), () => { weather.spread = k; setWeather(weather.k, weather.roll, false, true); })));
+      mc.appendChild(seg);
+      if (isPatchy(weather)) {
+        const pk = partyWeather();
+        mc.appendChild(el('p', 'tip', `Clouds drift across the map on their own, about once every ${CLOUD_CROSS_MIN} minutes of real time. It only rains under them. The weather sound and the travel rules follow the party token.`));
+        mc.appendChild(el('div', 'wx-party' + (pk === 'overcast' ? '' : ' wet'), partyPos ? (pk === 'overcast' ? 'The party is out of the clouds right now (overcast).' : `The party is under the clouds: ${wxOf(pk)[2].toLowerCase()}.`) : 'Place the party token to have sound and travel follow the clouds.'));
+        mc.appendChild(btn('New clouds', 'small', () => setWeather(weather.k, weather.roll)));
+      }
+      b.appendChild(mc);
+    }
     const ac = el('label', 'check'), acb = el('input');
     acb.type = 'checkbox'; acb.checked = !!weather.auto;
     acb.onchange = () => { weather.auto = acb.checked; lsSet(WX_KEY(), weather); };
@@ -5482,7 +5552,8 @@
       wx.canvas = el('canvas', 'wx-layer wx-rain'); map.getContainer().appendChild(wx.canvas);
     }
     const dim = editing ? 0.5 : 1; // the DM still needs to see the map
-    wx.wash.style.background = L.wash ? `rgba(${L.washColor},${(L.wash * dim).toFixed(3)})` : 'transparent';
+    const patchy = isPatchy(weather), wash = patchy ? 0.12 : L.wash;
+    wx.wash.style.background = wash ? `rgba(${L.washColor},${(wash * dim).toFixed(3)})` : 'transparent';
     wx.mist.style.opacity = L.mist ? String(L.mistA * dim) : '0';
     wx.mist.classList.toggle('on', !!L.mist);
     wx.mist.classList.toggle('purple', k === 'purple');
@@ -5500,29 +5571,57 @@
     };
     let dpr = fit();
     const W = () => wx.canvas.width, H = () => wx.canvas.height;
-    wx.drops = Array.from({ length: L.drops }, () => ({ x: Math.random() * W(), y: Math.random() * H(), v: 0.7 + Math.random() * 0.6 }));
-    let last = performance.now();
+    wx.drops = Array.from({ length: patchy ? L.drops * 2 : L.drops }, () => ({ x: Math.random() * W(), y: Math.random() * H(), v: 0.7 + Math.random() * 0.6 }));
+    let last = performance.now(), bolt = null;
+    // Grey enough to read as cloud over the dark map.
+    const cloudShade = k === 'storm' ? '62,66,84' : k === 'rain' ? '78,84,100' : '96,102,116';
+    const cloudA = (k === 'storm' ? 0.5 : k === 'rain' ? 0.42 : 0.32) * (editing ? 0.7 : 1);
     const tick = (now) => {
       wx.raf = requestAnimationFrame(tick);
       if (document.hidden) return;
       const dt = Math.min(3, (now - last) / 16.7); last = now;
       if (Math.random() < 0.01) dpr = fit();
       ctx.clearRect(0, 0, W(), H());
+      // Clouds: soft dark blobs where it's raining, in screen pixels.
+      let blobs = null;
+      if (patchy) {
+        blobs = cloudBlobs(weather, Date.now()).map((c) => {
+          const p = map.project([c.lng, c.lat]), q = map.project([c.lng + c.r, c.lat]);
+          return { x: p.x * dpr, y: p.y * dpr, r: Math.abs(q.x - p.x) * dpr };
+        }).filter((c) => c.x + c.r > 0 && c.y + c.r > 0 && c.x - c.r < W() && c.y - c.r < H());
+        for (const c of blobs) {
+          const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, c.r);
+          g.addColorStop(0, `rgba(${cloudShade},${cloudA})`);
+          g.addColorStop(0.6, `rgba(${cloudShade},${cloudA * 0.6})`);
+          g.addColorStop(1, `rgba(${cloudShade},0)`);
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2); ctx.fill();
+        }
+        // Lightning lights up one cloud at a time.
+        if (bolt && now < bolt.until) {
+          const g = ctx.createRadialGradient(bolt.x, bolt.y, 0, bolt.x, bolt.y, bolt.r);
+          g.addColorStop(0, `rgba(220,225,255,${0.45 * dim})`); g.addColorStop(1, 'rgba(220,225,255,0)');
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(bolt.x, bolt.y, bolt.r, 0, Math.PI * 2); ctx.fill();
+        }
+      }
       ctx.strokeStyle = `rgba(200,215,235,${L.alpha * dim})`;
       ctx.lineWidth = 1.1 * dpr;
       ctx.beginPath();
       const dx = -0.18;
+      const inCloud = (x, y) => { for (const c of blobs) { const ex = x - c.x, ey = y - c.y, rr = c.r * 0.8; if (ex * ex + ey * ey < rr * rr) return true; } return false; };
       for (const d of wx.drops) {
         const sp = L.speed * d.v * dpr * dt;
         d.y += sp; d.x += sp * dx;
         if (d.y > H()) { d.y = -L.len * dpr; d.x = Math.random() * W() * 1.1; }
         if (d.x < 0) d.x += W();
+        if (blobs && !inCloud(d.x, d.y)) continue;
         ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - L.len * dpr * dx, d.y - L.len * dpr * d.v);
       }
       ctx.stroke();
       if (L.bolts && now - wx.lastBolt > 4000 && Math.random() < 0.004 * dt) {
         wx.lastBolt = now;
-        wx.flash.classList.remove('bolt'); void wx.flash.offsetWidth; wx.flash.classList.add('bolt');
+        if (blobs) { if (blobs.length) { const c = blobs[Math.floor(Math.random() * blobs.length)]; bolt = { x: c.x, y: c.y, r: c.r * 1.3, until: now + 160 }; } }
+        else { wx.flash.classList.remove('bolt'); void wx.flash.offsetWidth; wx.flash.classList.add('bolt'); }
       }
     };
     wx.raf = requestAnimationFrame(tick);
