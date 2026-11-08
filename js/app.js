@@ -540,6 +540,7 @@
     map.on('click', onMapClick);
     map.on('dblclick', (e) => { if (mode && (mode.type === 'region' || mode.type === 'brush')) { e.preventDefault(); if (mode.type === 'region') finishRegion(); } });
     map.on('mousemove', rulerHover);
+    map.on('moveend', () => { clearLegCache(); if (ruler.active && ruler.points.length) { drawRuler(); updateRulerReadout(); } });
     map.on('mousedown', brushDown); map.on('touchstart', brushDown);
     map.on('mousemove', brushMove); map.on('touchmove', brushMove);
     map.on('mouseup', brushUp); map.on('touchend', brushUp);
@@ -4082,19 +4083,43 @@
   }
   // Walk a route and add up how much of it crosses each kind of ground.
   // Returns the "effective" distance (rough ground counts extra on foot) and what slowed them.
-  // Sample the ground once along the route: [[kind, miles], …] (kind is null where it's off screen).
-  function terrainSamples(pts) {
-    const real = routeMiles(pts), samples = [];
-    if (!editing || !styleReady || !map.getLayer('terrain-swamp') || pts.length < 2 || real <= 0) return { real, samples: [[null, real]] };
-    const step = Math.max(0.03, real / 160);
-    for (let i = 1; i < pts.length; i++) {
-      const a = pts[i - 1], b = pts[i], seg = realMiles(a, b), n = Math.max(1, Math.round(seg / step));
-      for (let j = 0; j < n; j++) {
-        const f = (j + 0.5) / n;
-        samples.push([terrainAt([a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]), seg / n]);
-      }
+  // Sample the ground along one leg: [[kind, miles, from, to], …] (kind is null where it's off screen).
+  // Finished legs are remembered, so the ruler only re-checks the leg that follows the mouse.
+  const legCache = new Map();
+  function legSamples(a, b, max, keep) {
+    const key = a.join() + '|' + b.join() + '|' + max;
+    if (keep && legCache.has(key)) return legCache.get(key);
+    const seg = realMiles(a, b), out = [];
+    const ready = editing && styleReady && map.getLayer('terrain-swamp');
+    const n = ready ? Math.max(1, Math.min(max, Math.round(seg / 0.03))) : 1;
+    for (let j = 0; j < n; j++) {
+      const f0 = j / n, f1 = (j + 1) / n, fm = (j + 0.5) / n;
+      const p = (f) => [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+      out.push([ready ? terrainAt(p(fm)) : null, seg / n, p(f0), p(f1)]);
     }
-    return { real, samples };
+    if (keep && ready) { if (legCache.size > 200) legCache.clear(); legCache.set(key, out); }
+    return out;
+  }
+  // Terrain is read from what's on screen, so look again after the map moves.
+  function clearLegCache() { legCache.clear(); rulerMemo = null; }
+  function terrainSamples(pts) {
+    const samples = [];
+    for (let i = 1; i < pts.length; i++) samples.push(...legSamples(pts[i - 1], pts[i], 160, false));
+    return { real: routeMiles(pts), samples };
+  }
+  // The ruler's route: finished legs in detail (cached), the leg following the mouse more roughly.
+  let rulerMemo = null;
+  function rulerSamples(pts) {
+    const key = ruler.mode + '|' + pts.map((p) => p.join()).join(';');
+    if (rulerMemo && rulerMemo.key === key) return rulerMemo.rs;
+    const samples = [], hoverLeg = ruler.hover && pts.length === ruler.points.length + 1;
+    for (let i = 1; i < pts.length; i++) {
+      const last = i === pts.length - 1 && hoverLeg;
+      samples.push(...legSamples(pts[i - 1], pts[i], last ? 30 : 100, !last));
+    }
+    const rs = { real: routeMiles(pts), samples };
+    rulerMemo = { key, rs };
+    return rs;
   }
   function terrainProfile(ts, modeKey) {
     const out = { real: ts.real, eff: 0, by: {}, offroad: 0 };
@@ -4185,27 +4210,31 @@
     const feats = ruler.points.map((p) => ({ type: 'Feature', properties: { k: 'pt' }, geometry: { type: 'Point', coordinates: p } }));
     if (pts.length >= 2) {
       feats.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: pts } });
-      const t = routeTime(1, ruler.mode, ruler.pace);
-      const blockReal = (t.perHour * 4) / data.travel.scale, dayReal = t.perDay / data.travel.scale;
-      const step = blockReal; // marks every 4 hours; days fall on some of them, or between
-      const marks = [];
-      for (let d = step; marks.length < 400; d += step) marks.push({ d, k: 'block' });
-      for (let d = dayReal, n = 1; n <= 120; d += dayReal, n++) marks.push({ d, k: 'day', n });
-      const total = routeMiles(pts);
-      marks.filter((m) => m.d < total - 1e-6).sort((a, b) => a.d - b.d).forEach((m) => {
-        let acc = 0;
-        for (let i = 1; i < pts.length; i++) {
-          const seg = realMiles(pts[i - 1], pts[i]);
-          if (acc + seg >= m.d) {
-            const f = seg ? (m.d - acc) / seg : 0, c = [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * f, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * f];
-            if (m.k === 'block' && marks.some((o) => o.k === 'day' && Math.abs(o.d - m.d) < blockReal * 0.15)) return;
-            feats.push({ type: 'Feature', properties: { k: m.k }, geometry: { type: 'Point', coordinates: c } });
-            if (m.k === 'day' && labelAt.length < 60) labelAt.push([c, m.n]);
-            return;
-          }
-          acc += seg;
+      // Marks every 4 hours of travel and at the end of each day, spaced by time, not distance:
+      // through swamp or woods on foot they bunch up, because the party covers less ground per hour.
+      const t = routeTime(1, ruler.mode, ruler.pace), scale = data.travel.scale;
+      const blockEff = (t.perHour * 4) / scale, dayEff = t.perDay / scale;
+      const rs = rulerSamples(pts);
+      const speedOf = (kind) => (ruler.mode === 'foot' ? (TERRAIN_SPEED[kind] || 1) : 1);
+      const totalEff = rs.samples.reduce((s, [kind, len]) => s + len / speedOf(kind), 0);
+      // Every mark along the way, in order of "effective" distance (a day end wins over a 4-hour mark at the same spot).
+      const events = [];
+      for (let n = 1; n * dayEff < totalEff && n <= 120; n++) events.push({ d: n * dayEff, k: 'day', n });
+      for (let n = 1; n * blockEff < totalEff && n <= 600; n++) {
+        const d = n * blockEff;
+        if (!events.some((o) => o.k === 'day' && Math.abs(o.d - d) < blockEff * 0.05)) events.push({ d, k: 'block' });
+      }
+      events.sort((x, y) => x.d - y.d);
+      let acc = 0, ei = 0;
+      for (const [kind, len, a, b] of rs.samples) {
+        const e = len / speedOf(kind);
+        while (ei < events.length && events[ei].d <= acc + e) {
+          const ev = events[ei++], f = e ? (ev.d - acc) / e : 0, c = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+          feats.push({ type: 'Feature', properties: { k: ev.k }, geometry: { type: 'Point', coordinates: c } });
+          if (ev.k === 'day' && labelAt.length < 60) labelAt.push([c, ev.n]);
         }
-      });
+        acc += e;
+      }
     }
     map.getSource('ruler').setData({ type: 'FeatureCollection', features: feats });
     // "Day N" tags: reuse the ones already on the map so the preview doesn't flicker.
@@ -4223,7 +4252,7 @@
     const pts = ruler.points.concat(ruler.hover && ruler.points.length ? [ruler.hover] : []);
     box.innerHTML = '';
     if (pts.length < 2) { box.appendChild(el('p', 'muted', ruler.points.length ? 'Click the next point of the route.' : 'Click the map where the party starts, then click along the route they’ll take.')); return; }
-    const ts = terrainSamples(pts), real = ts.real, prof = terrainProfile(ts, ruler.mode), t = routeTime(prof.eff, ruler.mode, ruler.pace);
+    const ts = rulerSamples(pts), real = ts.real, prof = terrainProfile(ts, ruler.mode), t = routeTime(prof.eff, ruler.mode, ruler.pace);
     box.appendChild(el('div', 'ruler-time', fmtDuration(t.hours, t.dayHours)));
     box.appendChild(el('div', 'ruler-sub', `${fmtMi(real * data.travel.scale)} miles of travel · ${TRAVEL[ruler.mode].name.toLowerCase()}, ${PACES[ruler.pace][0].toLowerCase()} pace (${t.perDay} miles a day, ${t.dayHours} hours on the move)`));
     const blocks = Math.ceil(t.hours / 4 - 1e-9), days = Math.ceil(t.days - 1e-9);
