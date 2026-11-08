@@ -1775,6 +1775,23 @@
     lb.hidden = !show;
     if (show) { closePage(); popup && popup.remove(); renderLog(); }
   }
+  // A collapsible group in the Logbook (a place's quests or people). Each player's open/closed choice is remembered.
+  const FOLD_KEY = () => 'campaign-map.logFolds:' + SITE_KEY;
+  function foldGroup(key, title, count, openByDefault, hasNew, children) {
+    const folds = lsGet(FOLD_KEY(), {}) || {};
+    const d = el('details', 'log-fold');
+    d.open = hasNew || (key in folds ? !!folds[key] : openByDefault);
+    const s = el('summary');
+    s.appendChild(el('span', 'log-fold-name', title));
+    if (hasNew) s.appendChild(el('span', 'log-fold-new', 'New'));
+    s.appendChild(el('span', 'log-fold-count', String(count)));
+    d.appendChild(s);
+    const inner = el('div', 'log-fold-body');
+    children.forEach((c) => inner.appendChild(c));
+    d.appendChild(inner);
+    d.addEventListener('toggle', () => { const f = lsGet(FOLD_KEY(), {}) || {}; f[key] = d.open; lsSet(FOLD_KEY(), f); });
+    return d;
+  }
   function renderLog() {
     const lb = $('#logbook');
     if (lb.hidden) return;
@@ -1801,7 +1818,18 @@
         const list = quests.filter((q) => q.status === st);
         if (!list.length) return;
         body.appendChild(el('div', 'group-title', label));
-        list.forEach((q) => body.appendChild(questCard(q, unseen.has(q.id))));
+        // Within each status, quests are grouped by the place they belong to.
+        const places = new Map();
+        list.forEach((q) => {
+          const l = q.locationId && byId(q.locationId);
+          const key = l ? l.id : '';
+          if (!places.has(key)) places.set(key, { name: l ? (isMystery(l) ? '???' : l.name || 'Unnamed place') : 'Elsewhere', order: l ? data.locations.indexOf(l) : 1e9, list: [] });
+          places.get(key).list.push(q);
+        });
+        [...places.entries()].sort((a, b) => a[1].order - b[1].order).forEach(([key, p]) => {
+          const hasNew = p.list.some((q) => unseen.has(q.id));
+          body.appendChild(foldGroup('q:' + st + ':' + key, p.name, p.list.length, st === 'active' || hasNew, hasNew, p.list.map((q) => questCard(q, unseen.has(q.id)))));
+        });
       });
       lsSet(seenKey(), quests.map((q) => q.id));
       updateLogBadge();
@@ -1811,10 +1839,9 @@
         const people = npcsFor(l);
         if (!people.length) return;
         any = true;
-        body.appendChild(el('div', 'group-title', l.name || 'Unnamed settlement'));
         const tf = l.titleFont || data.defaults.titleFont, bf = l.bodyFont || data.defaults.bodyFont;
         loadFont(tf); loadFont(bf);
-        people.forEach((n) => body.appendChild(npcCard(n, tf, bf)));
+        body.appendChild(foldGroup('p:' + l.id, l.name || 'Unnamed settlement', people.length, false, false, people.map((n) => npcCard(n, tf, bf))));
       });
       if (!any) body.appendChild(el('p', 'empty', 'Nobody yet. People you meet show up here.'));
     } else if (logTab === 'bestiary') {
@@ -3885,6 +3912,14 @@
         { key: 'image', label: 'Shop map or picture', type: 'image' }
       ], changed);
       b.appendChild(el('div', 'sub-h', 'People met here'));
+      if (loc.npcs.length) {
+        const hiddenN = loc.npcs.filter((n) => n.hidden).length;
+        const pr = el('div', 'btn-row');
+        pr.appendChild(el('span', 'tip', hiddenN === loc.npcs.length ? 'Everyone here is hidden from players.' : hiddenN ? `${hiddenN} of ${loc.npcs.length} hidden from players.` : 'Players can see everyone here.'));
+        if (hiddenN < loc.npcs.length) pr.appendChild(btn('Hide everyone here', 'small', () => { loc.npcs.forEach((n) => { n.hidden = true; }); changed(); showPinForm(loc); }));
+        if (hiddenN) pr.appendChild(btn('Show everyone here', 'small ghost', () => { loc.npcs.forEach((n) => { n.hidden = false; }); changed(); showPinForm(loc); }));
+        b.appendChild(pr);
+      }
       subList(b, loc.npcs, 'person', () => ({ id: uid(), name: '', role: '', description: '', image: '', hidden: false }), [
         { key: 'name', label: 'Name' },
         { key: 'role', label: 'Role (e.g. Blacksmith, Mayor)' },
