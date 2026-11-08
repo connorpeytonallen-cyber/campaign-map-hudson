@@ -862,7 +862,8 @@
     if (fireFx.last && now - fireFx.last < FOG_FRAME_MS) return;
     const dt = fireFx.last ? Math.min(0.25, (now - fireFx.last) / 1000) : 0;
     fireFx.last = now;
-    if (map.isMoving() || !fireOnScreen()) return;
+    // Unlike the fog, keep burning while the map moves: it's only four small flame images.
+    if (!fireOnScreen()) return;
     fireFx.t += dt;
     fireFrame();
     try { map.setPaintProperty('fire-glow', 'circle-opacity', 0.1 + 0.04 * Math.sin(fireFx.t * 5.3) * Math.sin(fireFx.t * 2.1 + 1)); } catch (e) { /* busy */ }
