@@ -611,6 +611,15 @@
     window.addEventListener('mouseup', (e) => { if ((e.buttons & 3) !== 3) end(); });
     window.addEventListener('blur', end);
     cont.addEventListener('contextmenu', (e) => e.preventDefault());
+    // Stop the browser from starting its own drag (a "picture" of the selection or an image)
+    // instead of panning the map, e.g. when text in the editor was left selected.
+    const mapEl = map.getContainer();
+    mapEl.addEventListener('dragstart', (e) => e.preventDefault(), true);
+    mapEl.addEventListener('mousedown', (e) => {
+      if (e.target.closest('input, textarea, select, [contenteditable]')) return;
+      const s = window.getSelection();
+      if (s && !s.isCollapsed) s.removeAllRanges();
+    }, true);
     // Compass: point north again.
     map.getContainer().addEventListener('click', (e) => {
       if (e.target.closest && e.target.closest('.maplibregl-ctrl-compass')) map.easeTo({ bearing: 0, duration: 400 });

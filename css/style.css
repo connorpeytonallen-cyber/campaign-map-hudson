@@ -5,6 +5,8 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: #030303; color: var(--text); font-family: var(--ui); }
 #map { position: absolute; inset: 0; }
+#map .maplibregl-canvas-container, #map .maplibregl-marker { -webkit-user-select: none; user-select: none; }
+#map img, #map .maplibregl-marker { -webkit-user-drag: none; }
 body.editing #map { right: 360px; }
 .fatal { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--muted); }
 
