@@ -3946,14 +3946,16 @@
     if (!clock || !partyTravel.advance) return;
     const real = realMiles(fromLL, toLL);
     if (real < 0.01) return;
-    const t = routeTime(real, partyTravel.mode, partyTravel.pace);
+    // Rough ground on the way (swamp, woods, sand) slows them on foot.
+    const prof = terrainProfile(terrainSamples([fromLL, toLL]), partyTravel.mode), tnote = terrainNote(prof, partyTravel.mode);
+    const t = Object.assign(routeTime(prof.eff, partyTravel.mode, partyTravel.pace), { travelMi: real * data.travel.scale });
     let left = t.hours, abs = clock.abs, guard = 0;
     while (left > 1e-6 && guard++ < 60 * 24 * 6) { // 10-minute steps, at most 60 days
       const step = isNight(clockTod(abs)) ? 1 / 12 : 1 / 6;
       left -= step; abs += 10;
     }
     const spent = abs - clock.abs;
-    setClock(abs, `${TRAVEL[partyTravel.mode].name}, ${PACES[partyTravel.pace][0].toLowerCase()}: ${fmtMi(t.travelMi)} miles took ${fmtDuration(spent / 60, 24)}. It’s now ${fmtClock(clockTod(abs))}, Day ${clockDay(abs)}.`);
+    setClock(abs, `${TRAVEL[partyTravel.mode].name}, ${PACES[partyTravel.pace][0].toLowerCase()}: ${fmtMi(t.travelMi)} miles took ${fmtDuration(spent / 60, 24)}. It’s now ${fmtClock(clockTod(abs))}, Day ${clockDay(abs)}.${tnote ? ' ' + tnote : ''}`);
   }
   // How the map looks at each hour: [hour, colour, opacity] (a dark wash at night, warm at dawn and dusk).
   const DAYLIGHT = [[0, '#02051a', .55], [4.5, '#02051a', .55], [6, '#ff8f4d', .16], [7.5, '#fff1d6', .05], [16.5, '#fff1d6', .05], [18.5, '#ff6a3d', .16], [20, '#0a0f30', .42], [24, '#02051a', .55]];
@@ -4028,7 +4030,13 @@
   let terrainOn = !!lsGet(TERRAIN_KEY, false);
   function applyTerrain() {
     const on = editing && terrainOn;
-    if (styleReady) TERRAIN.forEach(([id]) => { try { map.setLayoutProperty('terrain-' + id, 'visibility', on ? 'visible' : 'none'); } catch (e) { /* not ready */ } });
+    // While you edit, the terrain layers stay on the map (invisible when the view is off) so travel can read them.
+    if (styleReady) TERRAIN.forEach(([id]) => {
+      try {
+        map.setLayoutProperty('terrain-' + id, 'visibility', editing ? 'visible' : 'none');
+        map.setPaintProperty('terrain-' + id, 'fill-opacity', on ? (id === 'water' ? 0.35 : 0.5) : 0);
+      } catch (e) { /* not ready */ }
+    });
     let lg = $('#terrain-legend');
     if (!on) { if (lg) lg.remove(); return; }
     if (!lg) { lg = el('div'); lg.id = 'terrain-legend'; map.getContainer().appendChild(lg); }
@@ -4050,6 +4058,51 @@
       r.appendChild(txt);
       lg.appendChild(r);
     });
+  }
+  // Rough ground slows the party on foot: [terrain id] = speed (1 = normal). Roads through it count as normal.
+  const TERRAIN_SPEED = { swamp: 0.5, woods: 0.5, sand: 0.75 };
+  const ROAD_IDS = ['roads-minor', 'roads-major', 'roads-main', 'roads-highway'];
+  function terrainAt(ll) {
+    const p = map.project(ll), c = map.getCanvas();
+    if (p.x < 0 || p.y < 0 || p.x > c.clientWidth || p.y > c.clientHeight) return null; // off screen: unknown
+    if (map.queryRenderedFeatures([[p.x - 3, p.y - 3], [p.x + 3, p.y + 3]], { layers: ROAD_IDS }).length) return 'road';
+    const f = map.queryRenderedFeatures(p, { layers: TERRAIN.map(([id]) => 'terrain-' + id) });
+    return f.length ? f[0].layer.id.slice(8) : 'open';
+  }
+  // Walk a route and add up how much of it crosses each kind of ground.
+  // Returns the "effective" distance (rough ground counts extra on foot) and what slowed them.
+  // Sample the ground once along the route: [[kind, miles], …] (kind is null where it's off screen).
+  function terrainSamples(pts) {
+    const real = routeMiles(pts), samples = [];
+    if (!editing || !styleReady || !map.getLayer('terrain-swamp') || pts.length < 2 || real <= 0) return { real, samples: [[null, real]] };
+    const step = Math.max(0.03, real / 160);
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i], seg = realMiles(a, b), n = Math.max(1, Math.round(seg / step));
+      for (let j = 0; j < n; j++) {
+        const f = (j + 0.5) / n;
+        samples.push([terrainAt([a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]), seg / n]);
+      }
+    }
+    return { real, samples };
+  }
+  function terrainProfile(ts, modeKey) {
+    const out = { real: ts.real, eff: 0, by: {}, offroad: 0 };
+    ts.samples.forEach(([kind, len]) => {
+      if (kind) out.by[kind] = (out.by[kind] || 0) + len;
+      out.eff += len / (modeKey === 'foot' ? (TERRAIN_SPEED[kind] || 1) : 1);
+      if (modeKey === 'car' && (kind === 'swamp' || kind === 'woods')) out.offroad += len;
+    });
+    return out;
+  }
+  // A short note on what the ground did to the trip.
+  function terrainNote(prof, modeKey) {
+    const scale = data.travel.scale, mi = (k) => fmtMi((prof.by[k] || 0) * scale), bits = [];
+    if (modeKey === 'foot') {
+      ['swamp', 'woods', 'sand'].forEach((k) => { if ((prof.by[k] || 0) * scale >= 0.1) bits.push(`${mi(k)} mi of ${k === 'swamp' ? 'swamp' : k === 'woods' ? 'woods' : 'sand'}`); });
+      if (bits.length) return `Rough ground: ${bits.join(', ')} (${['swamp', 'woods'].some((k) => prof.by[k]) ? 'half speed' : 'slower'} there; roads through it don’t count).`;
+    }
+    if (modeKey === 'car' && prof.offroad * scale >= 0.1) return `${fmtMi(prof.offroad * scale)} mi of this runs off-road through swamp or woods: a car can’t go there.`;
+    return '';
   }
   function setTerrain(on) {
     terrainOn = on;
@@ -4159,11 +4212,13 @@
     const pts = ruler.points.concat(ruler.hover && ruler.points.length ? [ruler.hover] : []);
     box.innerHTML = '';
     if (pts.length < 2) { box.appendChild(el('p', 'muted', ruler.points.length ? 'Click the next point of the route.' : 'Click the map where the party starts, then click along the route they’ll take.')); return; }
-    const real = routeMiles(pts), t = routeTime(real, ruler.mode, ruler.pace);
+    const ts = terrainSamples(pts), real = ts.real, prof = terrainProfile(ts, ruler.mode), t = routeTime(prof.eff, ruler.mode, ruler.pace);
     box.appendChild(el('div', 'ruler-time', fmtDuration(t.hours, t.dayHours)));
-    box.appendChild(el('div', 'ruler-sub', `${fmtMi(t.travelMi)} miles of travel · ${TRAVEL[ruler.mode].name.toLowerCase()}, ${PACES[ruler.pace][0].toLowerCase()} pace (${t.perDay} miles a day, ${t.dayHours} hours on the move)`));
+    box.appendChild(el('div', 'ruler-sub', `${fmtMi(real * data.travel.scale)} miles of travel · ${TRAVEL[ruler.mode].name.toLowerCase()}, ${PACES[ruler.pace][0].toLowerCase()} pace (${t.perDay} miles a day, ${t.dayHours} hours on the move)`));
     const blocks = Math.ceil(t.hours / 4 - 1e-9), days = Math.ceil(t.days - 1e-9);
     const notes = [`${blocks} four-hour travel block${blocks === 1 ? '' : 's'} (a chance of an event in each)`];
+    const tn = terrainNote(prof, ruler.mode);
+    if (tn) notes.unshift(tn);
     if (ruler.pace === 1) notes.push(`Endurance check for everyone at the end of each day (${days}). A failure costs 10% sanity and 15% food.`);
     if (ruler.pace === 2) notes.push(`Tolerance checks every 2 hours past 10 (2 a day, ${days * 2} in all). Each failure costs 10% sanity and 15% food. Can’t be done two days in a row.`);
     if (ruler.mode !== 'foot') {
@@ -4174,7 +4229,7 @@
     const ul = el('ul', 'ruler-notes');
     notes.forEach((n) => ul.appendChild(el('li', null, n)));
     box.appendChild(ul);
-    const cmp = Object.keys(TRAVEL).filter((k) => k !== ruler.mode).map((k) => { const o = routeTime(real, k, ruler.pace); return TRAVEL[k].name + ': ' + fmtDuration(o.hours, o.dayHours); });
+    const cmp = Object.keys(TRAVEL).filter((k) => k !== ruler.mode).map((k) => { const o = routeTime(terrainProfile(ts, k).eff, k, ruler.pace); return TRAVEL[k].name + ': ' + fmtDuration(o.hours, o.dayHours); });
     box.appendChild(el('p', 'tip', 'At the same pace · ' + cmp.join(' · ')));
   }
   function showRuler() {
