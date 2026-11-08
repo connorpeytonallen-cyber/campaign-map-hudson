@@ -21242,27 +21242,40 @@ window.MAP_DATA = {
       "name": "New monster",
       "meta": "Medium aberration, chaotic evil",
       "image": "",
+      "health": "22 (4d8 + 4)",
       "ac": "12",
-      "hp": "22 (4d8 + 4)",
       "speed": "30 ft.",
-      "str": 10,
-      "dex": 10,
-      "con": 10,
-      "int": 10,
-      "wis": 10,
-      "cha": 10,
-      "saves": "",
-      "skills": "",
+      "prowess": {
+        "power": 0,
+        "reflex": 0,
+        "outlook": 0,
+        "wit": 0,
+        "endurance": 0,
+        "social": 0,
+        "serendipity": 0
+      },
       "resist": "",
-      "senses": "passive Perception 10",
-      "languages": "",
-      "cr": "",
+      "sanity": "",
       "traits": "",
       "actions": "",
       "reactions": "",
-      "legendary": "",
-      "notes": "",
-      "revealed": false
+      "notes": "Senses: passive Perception 10"
+    }
+  ],
+  "bestiary": [
+    {
+      "id": "pmw82hupzj3kr",
+      "name": "Hup'ehye",
+      "image": "images/pmw82hupzj3kr-mw82j77k0.jpg",
+      "description": "",
+      "revealed": true
+    },
+    {
+      "id": "pmw82ixz9wcz2",
+      "name": "Meeklain",
+      "image": "images/pmw82ixz9wcz2-mw82j77l1.jpg",
+      "description": "",
+      "revealed": true
     }
   ],
   "sounds": [
