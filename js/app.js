@@ -2554,15 +2554,31 @@
     if (s.loop) {
       let a = loops.get(id);
       if (!a) { a = new Audio(src); a.loop = true; loops.set(id, a); }
-      a.volume = outVol(s);
+      a.volume = outVol(s) * duck;
       a.play().catch(() => {});
     } else {
       const a = new Audio(src);
       a.volume = outVol(s);
       oneShots.add(a);
-      a.addEventListener('ended', () => oneShots.delete(a));
-      a.play().catch(() => oneShots.delete(a));
+      // While a sound effect plays, the loops (rain, thunder, music) dip so it comes through.
+      const done = () => { oneShots.delete(a); updateDuck(); };
+      a.addEventListener('ended', done);
+      a.addEventListener('error', done);
+      a.play().then(updateDuck).catch(done);
     }
+  }
+  // Ducking: loops fade to DUCK_LEVEL while any one-shot is playing on this screen, then fade back.
+  const DUCK_LEVEL = 0.35;
+  let duck = 1, duckTimer = 0;
+  function updateDuck() {
+    const target = [...oneShots].some((a) => !a.paused && !a.ended) ? DUCK_LEVEL : 1;
+    clearInterval(duckTimer);
+    duckTimer = setInterval(() => {
+      const step = target < duck ? 0.12 : 0.04; // dip quickly, come back gently
+      duck = target < duck ? Math.max(target, duck - step) : Math.min(target, duck + step);
+      applyVolumes();
+      if (duck === target) clearInterval(duckTimer);
+    }, 40);
   }
   function stopLocal(id) { const a = loops.get(id); if (a) { a.pause(); loops.delete(id); } }
   function stopAllLocal() {
@@ -2570,8 +2586,9 @@
     loops.clear();
     for (const a of oneShots) a.pause();
     oneShots.clear();
+    updateDuck();
   }
-  function applyVolumes() { for (const [id, a] of loops) { const s = soundById(id); if (s) a.volume = outVol(s); } }
+  function applyVolumes() { for (const [id, a] of loops) { const s = soundById(id); if (s) a.volume = outVol(s) * duck; } }
   function syncLoops() {
     for (const id of [...loops.keys()]) if (!remoteLoops.includes(id)) stopLocal(id);
     for (const id of remoteLoops) if (!loops.has(id)) playLocal(id);
@@ -5442,6 +5459,9 @@
     // Stop every other weather sound still running (even ones started before the page was reloaded).
     const wxIds = new Set(WEATHER.map((w) => weatherSound(w[0])).filter(Boolean).map((x) => x.id));
     if (wxSoundId) wxIds.add(wxSoundId);
+    // …and any other weather-ish loop you started by hand (a windy day, a breeze, rain…).
+    const WX_WORDS = /wind|breeze|gust|rain|drizzle|thunder|storm|calm|fog|mist|weather|howl/i;
+    data.sounds.forEach((x) => { if (x.loop && WX_WORDS.test(x.name) && (x.cat === 'ambience' || !x.cat)) wxIds.add(x.id); });
     wxIds.forEach((id) => { if ((!s || id !== s.id) && activeLoopIds.has(id)) { const old = soundById(id); if (old) dmStop(old); } });
     wxSoundId = s ? s.id : '';
     if (!s || activeLoopIds.has(s.id)) return;
@@ -5583,89 +5603,109 @@
     wx.kind = k;
     if (tintChanged) applyFogLook(); // purple fog tints the map's fog too
     cancelAnimationFrame(wx.raf);
-    const ctx = wx.canvas.getContext('2d');
+    // Two layers: a small cloud canvas the browser scales up (redrawn only a few times a second or when the map moves),
+    // and a rain canvas in plain CSS pixels. Keeps every frame cheap so it stays smooth even when nothing else moves.
+    if (!wx.cloud) {
+      wx.cloud = el('canvas', 'wx-layer wx-cloudlayer');
+      map.getContainer().insertBefore(wx.cloud, wx.canvas);
+      map.on('move', () => { wx.dirty = true; });
+      map.on('resize', () => { wx.dirty = true; wx.resized = true; });
+    }
+    const ctx = wx.canvas.getContext('2d'), cctx = wx.cloud.getContext('2d');
+    cctx.clearRect(0, 0, wx.cloud.width, wx.cloud.height);
+    wx.cloud.style.display = patchy ? '' : 'none';
+    wx.grid = null;
     if (!L.drops) { ctx.clearRect(0, 0, wx.canvas.width, wx.canvas.height); wx.canvas.style.display = 'none'; return; }
     wx.canvas.style.display = '';
+    const SC = 4, G = 12; // cloud canvas is 1/4 size; rain checks a 12px grid
+    let W = 0, H = 0;
     const fit = () => {
-      const r = map.getContainer().getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
-      if (wx.canvas.width !== Math.round(r.width * dpr)) { wx.canvas.width = Math.round(r.width * dpr); wx.canvas.height = Math.round(r.height * dpr); }
-      return dpr;
+      const c = map.getContainer();
+      W = c.clientWidth; H = c.clientHeight;
+      if (wx.canvas.width !== W || wx.canvas.height !== H) { wx.canvas.width = W; wx.canvas.height = H; }
+      const cw = Math.ceil(W / SC), ch = Math.ceil(H / SC);
+      if (wx.cloud.width !== cw || wx.cloud.height !== ch) { wx.cloud.width = cw; wx.cloud.height = ch; }
     };
-    let dpr = fit();
-    const W = () => wx.canvas.width, H = () => wx.canvas.height;
-    wx.drops = Array.from({ length: patchy ? L.drops * 2 : L.drops }, () => ({ x: Math.random() * W(), y: Math.random() * H(), v: 0.7 + Math.random() * 0.6 }));
-    let last = performance.now(), bolt = null;
+    fit();
+    wx.drops = Array.from({ length: patchy ? L.drops * 2 : L.drops }, () => ({ x: Math.random() * W, y: Math.random() * H, v: 0.7 + Math.random() * 0.6 }));
+    let last = performance.now(), lastCloud = 0, bolt = null, blobs = [];
     // Grey enough to read as cloud over the dark map, with a darker belly.
     const CLOUD_COL = { storm: ['#5a6072', '#14161e'], rain: ['#687083', '#262a36'], drizzle: ['#7d8496', '#3e4452'] }[k] || ['#687083', '#262a36'];
     const cloudA = (k === 'storm' ? 0.62 : k === 'rain' ? 0.52 : 0.4) * (editing ? 0.7 : 1);
-    // Clouds are drawn small and blurred, then scaled up: soft round edges, no hard blobs.
-    const SC = 4;
-    const offA = el('canvas'), offB = el('canvas'), cA = offA.getContext('2d'), cB = offB.getContext('2d');
-    const canBlur = 'filter' in cA;
-    function paintMask(c, cv, pts, grow, col) {
-      if (cv.width !== Math.ceil(W() / SC)) { cv.width = Math.ceil(W() / SC); cv.height = Math.ceil(H() / SC); }
+    wx.cloud.style.opacity = String(cloudA);
+    const core = el('canvas'), kctx = core.getContext('2d');
+    const canBlur = 'filter' in cctx;
+    function paint(c, cv, pts, grow, blur, col) {
       c.globalCompositeOperation = 'source-over';
       c.clearRect(0, 0, cv.width, cv.height);
-      if (canBlur) c.filter = `blur(${Math.max(2, Math.round(pts.blur / SC))}px)`;
+      if (canBlur) c.filter = `blur(${Math.max(2, Math.round(blur / SC))}px)`;
       c.fillStyle = '#fff';
       c.beginPath();
-      for (const p of pts) { c.moveTo(p.x / SC + p.r * grow / SC, p.y / SC); c.arc(p.x / SC, p.y / SC, p.r * grow / SC, 0, Math.PI * 2); }
+      for (const p of pts) { const r = p.r * grow / SC; c.moveTo(p.x / SC + r, p.y / SC); c.arc(p.x / SC, p.y / SC, r, 0, Math.PI * 2); }
       c.fill();
       if (canBlur) c.filter = 'none';
       c.globalCompositeOperation = 'source-in';
       c.fillStyle = col; c.fillRect(0, 0, cv.width, cv.height);
       c.globalCompositeOperation = 'source-over';
     }
+    function drawClouds() {
+      const c0 = map.getCenter(), p0 = map.project([c0.lng, c0.lat]), p1 = map.project([c0.lng + 0.01, c0.lat]);
+      const pxPerDeg = Math.abs(p1.x - p0.x) / 0.01;
+      blobs = cloudBlobs(weather, Date.now()).map((c) => { const p = map.project([c.lng, c.lat]); return { x: p.x, y: p.y, r: c.r * pxPerDeg }; })
+        .filter((c) => c.x + c.r * 1.3 > 0 && c.y + c.r * 1.3 > 0 && c.x - c.r * 1.3 < W && c.y - c.r * 1.3 < H);
+      // Where rain may fall: a coarse grid, so each drop is one lookup.
+      const gw = Math.ceil(W / G) + 1, gh = Math.ceil(H / G) + 1, grid = new Uint8Array(gw * gh);
+      for (const b of blobs) {
+        const rr = b.r * 0.95, x0 = Math.max(0, Math.floor((b.x - rr) / G)), x1 = Math.min(gw - 1, Math.floor((b.x + rr) / G));
+        const y0 = Math.max(0, Math.floor((b.y - rr) / G)), y1 = Math.min(gh - 1, Math.floor((b.y + rr) / G));
+        for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++) {
+          const ex = gx * G + G / 2 - b.x, ey = gy * G + G / 2 - b.y;
+          if (ex * ex + ey * ey < rr * rr) grid[gy * gw + gx] = 1;
+        }
+      }
+      wx.grid = { a: grid, w: gw };
+      const cw = wx.cloud.width, ch = wx.cloud.height;
+      cctx.clearRect(0, 0, cw, ch);
+      if (!blobs.length) return;
+      if (core.width !== cw || core.height !== ch) { core.width = cw; core.height = ch; }
+      const avgR = blobs.reduce((s, b) => s + b.r, 0) / blobs.length;
+      paint(cctx, wx.cloud, blobs, 1.05, avgR * 0.45, CLOUD_COL[0]);
+      paint(kctx, core, blobs, 0.55, avgR * 0.6, CLOUD_COL[1]);
+      cctx.globalAlpha = 0.85; cctx.drawImage(core, 0, 0); cctx.globalAlpha = 1;
+    }
+    let lastFit = 0;
     const tick = (now) => {
       wx.raf = requestAnimationFrame(tick);
       if (document.hidden) return;
       const dt = Math.min(3, (now - last) / 16.7); last = now;
-      if (Math.random() < 0.01) dpr = fit();
-      ctx.clearRect(0, 0, W(), H());
-      // Clouds: soft dark blobs where it's raining, in screen pixels.
-      let blobs = null;
-      if (patchy) {
-        const c0 = map.getCenter(), p0 = map.project([c0.lng, c0.lat]), p1 = map.project([c0.lng + 0.01, c0.lat]);
-        const pxPerDeg = Math.abs(p1.x - p0.x) / 0.01 * dpr;
-        blobs = cloudBlobs(weather, Date.now()).map((c) => {
-          const p = map.project([c.lng, c.lat]);
-          return { x: p.x * dpr, y: p.y * dpr, r: c.r * pxPerDeg };
-        }).filter((c) => c.x + c.r * 1.3 > 0 && c.y + c.r * 1.3 > 0 && c.x - c.r * 1.3 < W() && c.y - c.r * 1.3 < H());
-        if (blobs.length) {
-          const avgR = blobs.reduce((s, b) => s + b.r, 0) / blobs.length;
-          blobs.blur = avgR * 0.45;
-          paintMask(cA, offA, blobs, 1.05, CLOUD_COL[0]);
-          blobs.blur = avgR * 0.6;
-          paintMask(cB, offB, blobs, 0.55, CLOUD_COL[1]);
-          ctx.imageSmoothingEnabled = true;
-          ctx.globalAlpha = cloudA; ctx.drawImage(offA, 0, 0, offA.width * SC, offA.height * SC);
-          ctx.globalAlpha = cloudA * 0.85; ctx.drawImage(offB, 0, 0, offB.width * SC, offB.height * SC);
-          ctx.globalAlpha = 1;
-        }
-        // Lightning lights up one cloud at a time.
-        if (bolt && now < bolt.until) {
-          const g = ctx.createRadialGradient(bolt.x, bolt.y, 0, bolt.x, bolt.y, bolt.r);
-          g.addColorStop(0, `rgba(220,225,255,${0.45 * dim})`); g.addColorStop(1, 'rgba(220,225,255,0)');
-          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(bolt.x, bolt.y, bolt.r, 0, Math.PI * 2); ctx.fill();
-        }
+      if (wx.resized || now - lastFit > 1000) { lastFit = now; wx.resized = false; fit(); }
+      if (patchy && (wx.dirty || now - lastCloud > 300)) { wx.dirty = false; lastCloud = now; drawClouds(); }
+      ctx.clearRect(0, 0, W, H);
+      // Lightning lights up one cloud at a time.
+      if (bolt && now < bolt.until) {
+        const g = ctx.createRadialGradient(bolt.x, bolt.y, 0, bolt.x, bolt.y, bolt.r);
+        g.addColorStop(0, `rgba(220,225,255,${0.45 * dim})`); g.addColorStop(1, 'rgba(220,225,255,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(bolt.x, bolt.y, bolt.r, 0, Math.PI * 2); ctx.fill();
       }
       ctx.strokeStyle = `rgba(200,215,235,${L.alpha * dim})`;
-      ctx.lineWidth = 1.1 * dpr;
+      ctx.lineWidth = 1.1;
       ctx.beginPath();
-      const dx = -0.18;
-      const inCloud = (x, y) => { for (const c of blobs) { const ex = x - c.x, ey = y - c.y, rr = c.r * 0.95; if (ex * ex + ey * ey < rr * rr) return true; } return false; };
+      const dx = -0.18, gr = patchy ? wx.grid : null;
       for (const d of wx.drops) {
-        const sp = L.speed * d.v * dpr * dt;
+        const sp = L.speed * d.v * dt;
         d.y += sp; d.x += sp * dx;
-        if (d.y > H()) { d.y = -L.len * dpr; d.x = Math.random() * W() * 1.1; }
-        if (d.x < 0) d.x += W();
-        if (blobs && !inCloud(d.x, d.y)) continue;
-        ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - L.len * dpr * dx, d.y - L.len * dpr * d.v);
+        if (d.y > H) { d.y = -L.len; d.x = Math.random() * W * 1.1; }
+        if (d.x < 0) d.x += W;
+        if (patchy) {
+          if (!gr || d.y < 0 || d.x >= W) continue;
+          if (!gr.a[Math.floor(d.y / G) * gr.w + Math.floor(d.x / G)]) continue;
+        }
+        ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - L.len * dx, d.y - L.len * d.v);
       }
       ctx.stroke();
       if (L.bolts && now - wx.lastBolt > 4000 && Math.random() < 0.004 * dt) {
         wx.lastBolt = now;
-        if (blobs) { if (blobs.length) { const c = blobs[Math.floor(Math.random() * blobs.length)]; bolt = { x: c.x, y: c.y, r: c.r * 1.3, until: now + 160 }; } }
+        if (patchy) { if (blobs.length) { const c = blobs[Math.floor(Math.random() * blobs.length)]; bolt = { x: c.x, y: c.y, r: c.r * 1.3, until: now + 160 }; } }
         else { wx.flash.classList.remove('bolt'); void wx.flash.offsetWidth; wx.flash.classList.add('bolt'); }
       }
     };
