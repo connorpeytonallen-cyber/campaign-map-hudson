@@ -15857,6 +15857,7 @@ window.MAP_DATA = {
       "symbolColor": "#141414",
       "scale": 1,
       "throughFog": false,
+      "mystery": false,
       "shops": [],
       "npcs": []
     },
@@ -15876,6 +15877,7 @@ window.MAP_DATA = {
       "symbolColor": "#141414",
       "scale": 0.7,
       "throughFog": false,
+      "mystery": false,
       "shops": [
         {
           "id": "pmw4hi82pbhet",
@@ -15961,6 +15963,7 @@ window.MAP_DATA = {
       "symbolColor": "#141414",
       "scale": 1.5,
       "throughFog": false,
+      "mystery": false,
       "shops": [],
       "npcs": []
     },
@@ -15980,6 +15983,7 @@ window.MAP_DATA = {
       "symbolColor": "",
       "scale": 0.7,
       "throughFog": false,
+      "mystery": false,
       "shops": [],
       "npcs": []
     },
@@ -15999,6 +16003,7 @@ window.MAP_DATA = {
       "symbolColor": "",
       "scale": 1,
       "throughFog": false,
+      "mystery": false,
       "shops": [],
       "npcs": []
     },
@@ -16018,6 +16023,7 @@ window.MAP_DATA = {
       "symbolColor": "",
       "scale": 1.5,
       "throughFog": false,
+      "mystery": false,
       "shops": [],
       "npcs": []
     },
@@ -16037,6 +16043,7 @@ window.MAP_DATA = {
       "symbolColor": "",
       "scale": 1,
       "throughFog": true,
+      "mystery": false,
       "shops": [],
       "npcs": []
     },
@@ -16055,6 +16062,8 @@ window.MAP_DATA = {
       "symbol": "",
       "symbolColor": "",
       "scale": 1,
+      "throughFog": false,
+      "mystery": true,
       "shops": [],
       "npcs": []
     },
@@ -16073,6 +16082,8 @@ window.MAP_DATA = {
       "symbol": "",
       "symbolColor": "",
       "scale": 1,
+      "throughFog": false,
+      "mystery": true,
       "shops": [],
       "npcs": []
     },
@@ -16091,6 +16102,8 @@ window.MAP_DATA = {
       "symbol": "",
       "symbolColor": "",
       "scale": 1,
+      "throughFog": false,
+      "mystery": true,
       "shops": [],
       "npcs": []
     },
@@ -16109,6 +16122,8 @@ window.MAP_DATA = {
       "symbol": "",
       "symbolColor": "",
       "scale": 1,
+      "throughFog": false,
+      "mystery": false,
       "shops": [],
       "npcs": []
     },
@@ -16127,6 +16142,8 @@ window.MAP_DATA = {
       "symbol": "",
       "symbolColor": "",
       "scale": 1,
+      "throughFog": false,
+      "mystery": true,
       "shops": [],
       "npcs": []
     },
@@ -16145,6 +16162,8 @@ window.MAP_DATA = {
       "symbol": "",
       "symbolColor": "",
       "scale": 1,
+      "throughFog": false,
+      "mystery": true,
       "shops": [],
       "npcs": []
     },
@@ -16163,6 +16182,8 @@ window.MAP_DATA = {
       "symbol": "",
       "symbolColor": "",
       "scale": 1,
+      "throughFog": false,
+      "mystery": true,
       "shops": [],
       "npcs": []
     },
@@ -16181,6 +16202,8 @@ window.MAP_DATA = {
       "symbol": "",
       "symbolColor": "",
       "scale": 1,
+      "throughFog": false,
+      "mystery": true,
       "shops": [],
       "npcs": []
     },
@@ -16199,6 +16222,8 @@ window.MAP_DATA = {
       "symbol": "",
       "symbolColor": "",
       "scale": 1,
+      "throughFog": false,
+      "mystery": true,
       "shops": [],
       "npcs": []
     }
@@ -20796,88 +20821,88 @@ window.MAP_DATA = {
       "name": "Rain_Event",
       "audio": "sounds/pmw7fxzs4zfhb-mw7g16ty0.mp3",
       "loop": true,
-      "volume": 0.8,
-      "cat": "ambience"
+      "cat": "ambience",
+      "volume": 0.8
     },
     {
       "id": "pmw7fy1x488k7",
       "name": "Thunderstorm_Event",
       "audio": "sounds/pmw7fy1x488k7-mw7g16u31.mp3",
       "loop": true,
-      "volume": 0.8,
-      "cat": "ambience"
+      "cat": "ambience",
+      "volume": 0.8
     },
     {
       "id": "pmw7fz1cb19qp",
       "name": "Shotgun_Shot1",
       "audio": "sounds/pmw7fz1cb19qp-mw7g16u32.mp3",
       "loop": false,
-      "volume": 0.8,
-      "cat": "physical"
+      "cat": "physical",
+      "volume": 0.8
     },
     {
       "id": "pmw7fzh53bgja",
       "name": "Rifle_Shot_1",
       "audio": "sounds/pmw7fzh53bgja-mw7g16u33.mp3",
       "loop": false,
-      "volume": 0.8,
-      "cat": "physical"
+      "cat": "physical",
+      "volume": 0.8
     },
     {
       "id": "pmw7fzh54wxx4",
       "name": "Rifle_Shot_2",
       "audio": "sounds/pmw7fzh54wxx4-mw7g16u34.mp3",
       "loop": false,
-      "volume": 0.8,
-      "cat": "physical"
+      "cat": "physical",
+      "volume": 0.8
     },
     {
       "id": "pmw7fzh55ymsu",
       "name": "Machine_Gun_Shot_1",
       "audio": "sounds/pmw7fzh55ymsu-mw7g16u35.mp3",
       "loop": false,
-      "volume": 0.8,
-      "cat": "physical"
+      "cat": "physical",
+      "volume": 0.8
     },
     {
       "id": "pmw7fzh565qlr",
       "name": "Pistol_Shot_1",
       "audio": "sounds/pmw7fzh565qlr-mw7g16u36.mp3",
       "loop": false,
-      "volume": 0.8,
-      "cat": "physical"
+      "cat": "physical",
+      "volume": 0.8
     },
     {
       "id": "pmw7fzh59da7p",
       "name": "Revolver_Shot_1",
       "audio": "sounds/pmw7fzh59da7p-mw7g16u37.mp3",
       "loop": false,
-      "volume": 0.8,
-      "cat": "physical"
+      "cat": "physical",
+      "volume": 0.8
     },
     {
       "id": "pmw7fzh593vjj",
       "name": "Distant_Shots_1",
       "audio": "sounds/pmw7fzh593vjj-mw7g16u38.mp3",
       "loop": false,
-      "volume": 0.8,
-      "cat": "physical"
+      "cat": "physical",
+      "volume": 0.8
     },
     {
       "id": "pmw7fzh5alprs",
       "name": "Distant_Shots_2",
       "audio": "sounds/pmw7fzh5alprs-mw7g16u39.mp3",
       "loop": false,
-      "volume": 0.8,
-      "cat": "physical"
+      "cat": "physical",
+      "volume": 0.8
     },
     {
       "id": "pmw7g2axid7pl",
       "name": "Forrest_Fire",
       "audio": "sounds/pmw7g2axid7pl-mw7g2oai0.mp3",
       "loop": true,
-      "volume": 0.8,
-      "cat": "ambience"
+      "cat": "ambience",
+      "volume": 0.8
     }
   ],
   "fire": [
