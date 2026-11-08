@@ -2946,8 +2946,8 @@ window.MAP_DATA = {
         ]
       ],
       "labelAt": [
-        -79.895576,
-        32.793799
+        -79.89548,
+        32.793475
       ],
       "labelScale": 0.9
     }
@@ -3138,8 +3138,8 @@ window.MAP_DATA = {
       "kind": "place",
       "name": "Armed Fox Depot",
       "description": "...",
-      "lng": -79.750296,
-      "lat": 32.802024,
+      "lng": -79.754025,
+      "lat": 32.800917,
       "titleFont": "IM Fell English",
       "bodyFont": "IM Fell English",
       "textSize": "",
