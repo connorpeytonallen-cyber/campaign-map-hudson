@@ -16341,7 +16341,7 @@ window.MAP_DATA = {
           "role": "Landowner",
           "description": "“Gray suit gone shiny at the knees, deed folded in his breast pocket. Polite, stubborn, and certain the law is still on his side.”",
           "image": "",
-          "hidden": false
+          "hidden": true
         },
         {
           "id": "pmww6by6kjc2d",
@@ -16349,7 +16349,7 @@ window.MAP_DATA = {
           "role": "Trader",
           "description": "“Sun-browned and tired, dirt under her nails. She does the real work and the real bargaining.”",
           "image": "",
-          "hidden": false
+          "hidden": true
         },
         {
           "id": "pmwa3k32aucbe",
@@ -16357,7 +16357,7 @@ window.MAP_DATA = {
           "role": "Hired Gun",
           "description": "“Lanky and grinning, a deer rifle over one shoulder. Paid in corn, loyal to whoever’s feeding him.”",
           "image": "",
-          "hidden": false
+          "hidden": true
         }
       ]
     },
@@ -16404,7 +16404,7 @@ window.MAP_DATA = {
           "role": "Elder",
           "description": "“Ancient and tiny, wrapped in a fishnet shawl. She reads the tide like scripture, and lately it has been saying things that frighten her.”",
           "image": "",
-          "hidden": false
+          "hidden": true
         },
         {
           "id": "pmwasty25qkm8",
@@ -16412,7 +16412,7 @@ window.MAP_DATA = {
           "role": "Fisherman",
           "description": "“Broad, quiet and missing two fingers. Trades fish for anything that shoots.”",
           "image": "",
-          "hidden": false
+          "hidden": true
         },
         {
           "id": "pmwpazirm5kjd",
@@ -16420,7 +16420,7 @@ window.MAP_DATA = {
           "role": "Marsh Guide",
           "description": "“Quick, sharp-eyed and barefoot in the mud. She knows every safe path through the marsh, and she charges for it.”",
           "image": "",
-          "hidden": false
+          "hidden": true
         }
       ]
     },
@@ -16459,7 +16459,7 @@ window.MAP_DATA = {
           "role": "Watchman",
           "description": "“Old and half-deaf, a shotgun across his knees. He’ll ring the bell at anything.”",
           "image": "",
-          "hidden": false
+          "hidden": true
         }
       ]
     },
@@ -16514,7 +16514,7 @@ window.MAP_DATA = {
           "role": "Commander",
           "description": "“Upright and gray at the temples, uniform pressed every morning. Speaks in orders even when he’s being kind.”",
           "image": "",
-          "hidden": false
+          "hidden": true
         },
         {
           "id": "pmwcu2a7ed4j7",
@@ -16522,7 +16522,7 @@ window.MAP_DATA = {
           "role": "Quartermaster",
           "description": "“Thick glasses and a clipboard she never puts down. Everything has a form, and every form has a price.”",
           "image": "",
-          "hidden": false
+          "hidden": true
         },
         {
           "id": "pmwafb5k8ols5",
@@ -16530,7 +16530,7 @@ window.MAP_DATA = {
           "role": "Gate Sergeant",
           "description": "“Broad, sunburned and bored, with a rubber stamp on a string. Your papers are either in order or they aren’t.”",
           "image": "",
-          "hidden": false
+          "hidden": true
         },
         {
           "id": "pmwj1manh32oe",
@@ -16538,7 +16538,7 @@ window.MAP_DATA = {
           "role": "Army Surgeon",
           "description": "“Brisk and spotless, sleeves rolled to the elbow. She fixes what she can and writes down everything she can’t.”",
           "image": "",
-          "hidden": false
+          "hidden": true
         },
         {
           "id": "pmwf4uxrjzdgu",
@@ -16546,7 +16546,7 @@ window.MAP_DATA = {
           "role": "Mess Cook",
           "description": "“Round, loud and generous with the ladle. The only man in Breakwater who doesn’t ask for papers.”",
           "image": "",
-          "hidden": false
+          "hidden": true
         },
         {
           "id": "pmwpf62e9z3kc",
@@ -16601,7 +16601,7 @@ window.MAP_DATA = {
           "role": "Chief of Police",
           "description": "“Big, red-faced and hoarse, with a polished badge on a filthy coat. He used to drink too much at parties. Now he doesn’t drink at all, and he never forgets a face.”",
           "image": "",
-          "hidden": false
+          "hidden": true
         },
         {
           "id": "pmwlbms7xt2te",
@@ -16609,7 +16609,7 @@ window.MAP_DATA = {
           "role": "Armorer",
           "description": "“Wiry, with grease to the elbows and a cigarette she never lights. She’ll sell you a gun, but she wants to be paid in food.”",
           "image": "",
-          "hidden": false
+          "hidden": true
         },
         {
           "id": "pmwwxdzfbuf12",
@@ -16617,7 +16617,7 @@ window.MAP_DATA = {
           "role": "Survey Team 3",
           "description": "“Thin and polite, notebook always out. He’s missing his badge and pretends he isn’t.”",
           "image": "",
-          "hidden": false
+          "hidden": true
         },
         {
           "id": "pmwmdqzfrd3my",
