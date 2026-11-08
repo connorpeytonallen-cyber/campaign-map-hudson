@@ -2140,16 +2140,32 @@
       dropped: arr(x.dropped).map(Number).filter((v) => Number.isInteger(v) && v >= 1 && v <= sides).slice(0, 20)
     };
   }
+  // Rolls clear themselves after 5 minutes, on everyone's screen.
+  const DICE_MAX_AGE = 5 * 60 * 1000;
+  const rollFresh = (x) => x.ts > Date.now() - DICE_MAX_AGE;
+  function pruneOldRolls() {
+    if (!me) return;
+    let changed = false;
+    const before = diceLog.length;
+    diceLog = diceLog.filter(rollFresh);
+    if (diceLog.length !== before) { changed = true; diceUnread = Math.min(diceUnread, diceLog.length); }
+    if (editing) {
+      const h = lsGet(HIDDEN_KEY, []), keep = h.filter(rollFresh);
+      if (keep.length !== h.length) { lsSet(HIDDEN_KEY, keep); changed = true; }
+    }
+    if (changed) renderDice(false);
+  }
+  setInterval(pruneOldRolls, 15000);
   function mergeRolls(list) {
     const byKey = new Map(diceLog.map((x) => [x.id, x]));
     let added = 0;
     for (const raw of list) {
       const x = cleanRoll(raw);
-      if (!x || byKey.has(x.id) || x.ts <= diceClearedAt) continue;
+      if (!x || byKey.has(x.id) || x.ts <= diceClearedAt || !rollFresh(x)) continue;
       byKey.set(x.id, x);
       added++;
     }
-    diceLog = [...byKey.values()].sort((a, b) => a.ts - b.ts).slice(-DICE_LOG_MAX);
+    diceLog = [...byKey.values()].filter(rollFresh).sort((a, b) => a.ts - b.ts).slice(-DICE_LOG_MAX);
     return added;
   }
   function publishRolls() {
@@ -2264,7 +2280,7 @@
     const log = box.querySelector('.dice-log');
     const atEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 30;
     log.innerHTML = '';
-    if (!diceLog.length) log.appendChild(el('div', 'dice-empty', 'No rolls yet. Pick a die below and roll.'));
+    if (!diceLog.length) log.appendChild(el('div', 'dice-empty', 'No recent rolls. Pick a die below and roll. Rolls clear after 5 minutes.'));
     diceLog.forEach((e) => log.appendChild(rollLine(e, false)));
     if (editing) {
       const h = lsGet(HIDDEN_KEY, []);
@@ -3368,6 +3384,19 @@
       });
     }
     return clipperLoading;
+  }
+  // Water areas (from the loaded map tiles) that touch a box.
+  function waterIn(bb) {
+    const water = [];
+    for (const f of map.querySourceFeatures('base', { sourceLayer: 'water' })) {
+      const g = f.geometry;
+      const polys = g && g.type === 'Polygon' ? [g.coordinates] : g && g.type === 'MultiPolygon' ? g.coordinates : [];
+      for (const p of polys) {
+        const b = ringBox(p[0]);
+        if (b[2] >= bb[0] && b[0] <= bb[2] && b[3] >= bb[1] && b[1] <= bb[3]) water.push(p);
+      }
+    }
+    return water;
   }
   async function traceCoast(r) {
     const id = r.id;
@@ -5003,7 +5032,12 @@
         } else if (r) {
           // "Add land" stops at the neighbours' borders; "Claim" paints right over them.
           const others = m.kind === 'add' ? regionsNear(r, paint) : [];
-          const extra = others.length ? dropSlivers(tidy(pc.difference(paint, ...others.map(regionPolys))), polysArea(paint), 0.01) : paint;
+          let extra = others.length ? dropSlivers(tidy(pc.difference(paint, ...others.map(regionPolys))), polysArea(paint), 0.01) : paint;
+          // Regions that follow the coastline don't take in water when you paint over it.
+          if (extra && r.coast) {
+            const water = waterIn(polysBox(extra));
+            if (water.length) extra = dropSlivers(tidy(pc.difference(extra, ...water)), polysArea(paint), 0.01);
+          }
           if (extra) { r.shape = tidy(pc.union(regionPolys(r), extra)); r.erased = true; }
         }
       } else if (m.fire) {
