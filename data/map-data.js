@@ -2949,7 +2949,8 @@ window.MAP_DATA = {
         -79.89548,
         32.793475
       ],
-      "labelScale": 0.9
+      "labelScale": 0.9,
+      "labelAngle": -14
     },
     {
       "id": "pmw7dzdxkfq49",
@@ -3811,7 +3812,9 @@ window.MAP_DATA = {
       "labelAt": [
         -79.847957,
         32.895191
-      ]
+      ],
+      "labelScale": 1,
+      "labelAngle": 0
     },
     {
       "id": "pmw7e0m5mmw3n",
@@ -5323,9 +5326,11 @@ window.MAP_DATA = {
         ]
       ],
       "labelAt": [
-        -79.937792,
-        32.785253
-      ]
+        -79.937014,
+        32.785648
+      ],
+      "labelScale": 0.9,
+      "labelAngle": -16
     },
     {
       "id": "pmw7e6e4kuraq",
@@ -11809,9 +11814,11 @@ window.MAP_DATA = {
         ]
       ],
       "labelAt": [
-        -79.803255,
-        32.826056
-      ]
+        -79.803829,
+        32.82607
+      ],
+      "labelScale": 1,
+      "labelAngle": 49
     }
   ],
   "locations": [
