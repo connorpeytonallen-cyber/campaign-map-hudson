@@ -16183,6 +16183,24 @@ window.MAP_DATA = {
       "scale": 1,
       "shops": [],
       "npcs": []
+    },
+    {
+      "id": "pmw7zxfcllwc4",
+      "kind": "place",
+      "name": "New place",
+      "description": "",
+      "lng": -79.842812,
+      "lat": 32.804675,
+      "titleFont": "",
+      "bodyFont": "",
+      "textSize": "",
+      "color": "",
+      "image": "",
+      "symbol": "",
+      "symbolColor": "",
+      "scale": 1,
+      "shops": [],
+      "npcs": []
     }
   ],
   "quests": [
