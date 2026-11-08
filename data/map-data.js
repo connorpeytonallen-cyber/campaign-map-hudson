@@ -21236,7 +21236,35 @@ window.MAP_DATA = {
     }
   ],
   "stickers": [],
-  "monsters": [],
+  "monsters": [
+    {
+      "id": "pmw824azdtdgo",
+      "name": "New monster",
+      "meta": "Medium aberration, chaotic evil",
+      "image": "",
+      "ac": "12",
+      "hp": "22 (4d8 + 4)",
+      "speed": "30 ft.",
+      "str": 10,
+      "dex": 10,
+      "con": 10,
+      "int": 10,
+      "wis": 10,
+      "cha": 10,
+      "saves": "",
+      "skills": "",
+      "resist": "",
+      "senses": "passive Perception 10",
+      "languages": "",
+      "cr": "",
+      "traits": "",
+      "actions": "",
+      "reactions": "",
+      "legendary": "",
+      "notes": "",
+      "revealed": false
+    }
+  ],
   "sounds": [
     {
       "id": "pmw6z8gvdvj8i",
