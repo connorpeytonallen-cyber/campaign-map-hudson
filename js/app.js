@@ -858,6 +858,8 @@
     fogFx.last = now;
     // Pause while someone pans or zooms (keeps dragging smooth), or when no fog is in view.
     if (map.isMoving() || !fogOnScreen()) return;
+    // While rain is falling the fog holds still: every fog update makes the whole map redraw, which made the rain judder.
+    if (rainFalling()) return;
     fogFx.t += dt;
     const st = data.fogStyle;
     if (st.speed > 0) {
@@ -3959,6 +3961,131 @@
     upd();
     return box;
   }
+  // --- Region a point sits in (the smallest one, if they overlap) ---
+  function ringHas(ring, x, y) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i], [xj, yj] = ring[j];
+      if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  function regionAt(lng, lat) {
+    let best = null, bestA = Infinity;
+    for (const r of data.regions) {
+      const polys = Array.isArray(r.shape) && r.shape.length ? r.shape : Array.isArray(r.points) && r.points.length > 2 ? [[r.points]] : [];
+      for (const poly of polys) {
+        if (!poly || !poly[0] || !ringHas(poly[0], lng, lat) || poly.slice(1).some((h) => ringHas(h, lng, lat))) continue;
+        const bx = poly[0].reduce((a, p) => [Math.min(a[0], p[0]), Math.min(a[1], p[1]), Math.max(a[2], p[0]), Math.max(a[3], p[1])], [Infinity, Infinity, -Infinity, -Infinity]);
+        const area = (bx[2] - bx[0]) * (bx[3] - bx[1]);
+        if (area < bestA) { bestA = area; best = r; }
+      }
+    }
+    return best;
+  }
+  // The region's hue, but bright enough to read as a pin.
+  function pinShade(hex) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+    if (!m) return hex;
+    let [r, g, b] = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16) / 255);
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    let h = 0, s = 0, l = (mx + mn) / 2;
+    if (mx !== mn) {
+      const d = mx - mn;
+      s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+      h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      h /= 6;
+    }
+    l = Math.max(l, 0.55); s = Math.max(s, 0.55);
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+    const f = (t) => { t = (t + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 0.5 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+    return '#' + [f(h + 1 / 3), f(h), f(h - 1 / 3)].map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
+  }
+  // --- Rename everywhere: swaps a name in pins, people, shops, quests, regions, monsters and the event table ---
+  const RENAME_SKIP = new Set(['id', 'image', 'audio', 'color', 'symbolColor', 'font', 'titleFont', 'bodyFont', 'symbol', 'kind', 'status', 'locationId', 'cat']);
+  // Every place a name appears: [{o, k, at, len, where, before, after, pick}]. Nothing changes until you apply.
+  function findMentions(oldName) {
+    const esc = oldName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s?'); // "Shell Point" also finds "Shellpoint"
+    const re = new RegExp(`(^|[^\\w’'])(${esc})(?=$|[^\\w])`, 'gi');
+    const out = [];
+    const label = (top, o) => {
+      if (top === 'regions') return `Region “${o.name || 'unnamed'}”`;
+      if (top === 'quests') return `Quest “${o.title || 'untitled'}”`;
+      if (top === 'events') return 'Random-event table';
+      if (top === 'monsters' || top === 'bestiary') return `Creature “${o.name || 'unnamed'}”`;
+      return `“${o.name || 'unnamed'}”`;
+    };
+    const walk = (o, top, owner) => {
+      const visit = (k, v, holder) => {
+        if (typeof v === 'string') {
+          re.lastIndex = 0;
+          let m;
+          while ((m = re.exec(v))) {
+            const at = m.index + m[1].length, len = m[2].length;
+            // People's names (Eli Holloway), region names and quest givers are left unticked: usually a family or a region, not the town.
+            const isPerson = /^(name|keeper|giver|role)$/.test(String(k)) && v.trim().toLowerCase() !== oldName.trim().toLowerCase();
+            const isRegionName = top === 'regions' && k === 'name';
+            const isFamily = /^[’']?s?\s+(family|county|clan|kin|boys|brothers|sisters)\b/i.test(v.slice(at + len));
+            out.push({ o: holder, k, at, len, where: label(top, owner) + (k === 'name' || typeof k === 'number' ? '' : ` · ${k}`), before: v.slice(Math.max(0, at - 50), at), match: m[2], after: v.slice(at + len, at + len + 50), pick: !isPerson && !isRegionName && !isFamily });
+          }
+        } else if (v && typeof v === 'object') walk(v, top, Array.isArray(v) ? owner : v);
+      };
+      if (Array.isArray(o)) o.forEach((v, i) => visit(i, v, o));
+      else for (const k of Object.keys(o)) { if (!RENAME_SKIP.has(k)) visit(k, o[k], o); }
+    };
+    ['locations', 'quests', 'regions', 'monsters', 'bestiary', 'events'].forEach((k) => { if (data[k]) walk(data[k], k, data[k]); });
+    return out;
+  }
+  function applyMentions(list, newName) {
+    // Replace from the end of each text backwards so earlier positions stay right.
+    const picked = list.filter((x) => x.pick).sort((a, b) => b.at - a.at);
+    picked.forEach((x) => { const v = x.o[x.k]; x.o[x.k] = v.slice(0, x.at) + newName + v.slice(x.at + x.len); });
+    return picked.length;
+  }
+  function renameBox(loc) {
+    const box = el('details', 'evt-table');
+    box.appendChild(el('summary', null, 'Rename everywhere'));
+    box.appendChild(el('p', 'tip', 'Finds a name in every pin, person, shop, quest, region, stat block and the random-event table. You tick which ones to change. People’s names and region names start unticked. Only you see this.'));
+    const from = textInput(loc.name, () => {}, { placeholder: 'Old name' }), to = textInput('', () => {}, { placeholder: 'New name' });
+    box.appendChild(field('Old name', from));
+    box.appendChild(field('New name', to));
+    const list = el('div', 'rn-list');
+    let found = [];
+    box.appendChild(btn('Find mentions', 'small', () => {
+      const a = from.value.trim();
+      list.innerHTML = '';
+      if (!a) { toast('Type the old name first.', 'warn'); return; }
+      found = findMentions(a);
+      if (!found.length) { list.appendChild(el('p', 'muted', `Couldn’t find “${a}” anywhere.`)); return; }
+      list.appendChild(el('p', 'tip', `${found.length} mention${found.length === 1 ? '' : 's'} found. Untick any that should stay “${a}”.`));
+      found.forEach((x) => {
+        const row = el('label', 'rn-row'), cb = el('input');
+        cb.type = 'checkbox'; cb.checked = x.pick; cb.onchange = () => { x.pick = cb.checked; };
+        row.appendChild(cb);
+        const t = el('span', 'rn-text');
+        t.appendChild(el('b', 'rn-where', x.where));
+        const q = el('span', 'rn-ctx');
+        q.appendChild(document.createTextNode((x.before.length >= 50 ? '…' : '') + x.before));
+        q.appendChild(el('mark', null, x.match));
+        q.appendChild(document.createTextNode(x.after + (x.after.length >= 50 ? '…' : '')));
+        t.appendChild(q);
+        row.appendChild(t);
+        list.appendChild(row);
+      });
+      list.appendChild(btn('Change the ticked ones', 'small accent', async () => {
+        const a2 = from.value.trim(), z = to.value.trim();
+        if (!z || z === a2) { toast('Type the new name.', 'warn'); return; }
+        const n = found.filter((x) => x.pick).length;
+        if (!n) { toast('Nothing is ticked.', 'warn'); return; }
+        if (!(await ask(`Change ${n} mention${n === 1 ? '' : 's'} of “${a2}” to “${z}”?`, 'Change them', 'Cancel'))) return;
+        applyMentions(found, z);
+        changed(); renderMarkers(); renderRegions(); showPinForm(loc);
+        toast(`Changed ${n} mention${n === 1 ? '' : 's'} of “${a2}” to “${z}”. Publish when you’re ready.`, 'info', 7000);
+      }));
+    }));
+    box.appendChild(list);
+    return box;
+  }
   function showPinForm(loc) {
     currentView = 'pin'; selectedId = loc.id; setTab(null); updateStatus();
     const b = body();
@@ -3993,6 +4120,18 @@
     b.appendChild(row);
     b.appendChild(field('Text size', selectInput([['', 'Default'], ['s', 'Small'], ['m', 'Medium'], ['l', 'Large']], loc.textSize, (v) => { loc.textSize = v; refresh(); })));
     b.appendChild(colorField('Pin color', loc.color || data.defaults.color, (c) => { loc.color = c; refresh(); }));
+    // Match the region it sits in (a brighter shade so the pin still shows on the dark map).
+    const home = regionAt(loc.lng, loc.lat);
+    const mr = el('div', 'btn-row');
+    if (home) mr.appendChild(btn(`Match ${home.name || 'its region'}’s color`, 'small', () => { loc.color = pinShade(home.color); refresh(); showPinForm(loc); }));
+    mr.appendChild(btn('Match every settlement to its region', 'small ghost', () => {
+      let n = 0;
+      data.locations.forEach((l) => { const r = l.kind === 'settlement' && regionAt(l.lng, l.lat); if (r) { l.color = pinShade(r.color); updateMarker(l); n++; } });
+      changed(); showPinForm(loc);
+      toast(n ? `Recolored ${n} settlement${n === 1 ? '' : 's'} to match their regions.` : 'No settlements sit inside a region.', 'info', 5000);
+    }));
+    b.appendChild(mr);
+    b.appendChild(renameBox(loc));
     const sf = el('div', 'field', 'Symbol');
     sf.appendChild(symbolPicker(symbolOf(loc), (k) => { loc.symbol = k; refresh(); }));
     b.appendChild(sf);
@@ -5585,6 +5724,16 @@
     fog: { wash: 0, drops: 0, mist: 'rgba(205,210,215,', mistA: 0.62 },
     purple: { wash: 0.14, washColor: '40,10,60', drops: 0, mist: 'rgba(150,80,210,', mistA: 0.5, tint: '#7b3fd1' }
   };
+  function rainFalling() { const L = weather && WX_LOOK[weather.k]; return !!(L && L.drops && wx.raf && styleReady); }
+  // Lightning brightness over time (ms since the strike): flash, dim, second flash, fade.
+  const BOLT_CURVE = [[0, 0], [45, 0.55], [110, 0.05], [175, 0.4], [1100, 0]];
+  function boltAlpha(t) {
+    for (let i = 1; i < BOLT_CURVE.length; i++) {
+      const [t1, a1] = BOLT_CURVE[i], [t0, a0] = BOLT_CURVE[i - 1];
+      if (t <= t1) return a0 + (a1 - a0) * ((t - t0) / (t1 - t0));
+    }
+    return 0;
+  }
   function wxLayer(cls) { const d = el('div', 'wx-layer ' + cls); map.getContainer().appendChild(d); return d; }
   function applyWeather() {
     if (!map || !styleReady) return; // the map's 'load' handler draws it once ready
@@ -5679,13 +5828,18 @@
       if (document.hidden) return;
       const dt = Math.min(3, (now - last) / 16.7); last = now;
       if (wx.resized || now - lastFit > 1000) { lastFit = now; wx.resized = false; fit(); }
-      if (patchy && (wx.dirty || now - lastCloud > 300)) { wx.dirty = false; lastCloud = now; drawClouds(); }
+      if (patchy && (wx.dirty || now - lastCloud > 400)) { wx.dirty = false; lastCloud = now; drawClouds(); }
       ctx.clearRect(0, 0, W, H);
-      // Lightning lights up one cloud at a time.
-      if (bolt && now < bolt.until) {
-        const g = ctx.createRadialGradient(bolt.x, bolt.y, 0, bolt.x, bolt.y, bolt.r);
-        g.addColorStop(0, `rgba(220,225,255,${0.45 * dim})`); g.addColorStop(1, 'rgba(220,225,255,0)');
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(bolt.x, bolt.y, bolt.r, 0, Math.PI * 2); ctx.fill();
+      // Lightning, drawn right here on the rain layer (no extra full-screen layer to wake up).
+      // With moving clouds it lights up one cloud; over the whole map it flashes the whole view.
+      if (bolt) {
+        const a = boltAlpha(now - bolt.t) * dim;
+        if (a <= 0.005 && now - bolt.t > 200) bolt = null;
+        else if (bolt.r) {
+          const g = ctx.createRadialGradient(bolt.x, bolt.y, 0, bolt.x, bolt.y, bolt.r);
+          g.addColorStop(0, `rgba(220,225,255,${(a * 0.9).toFixed(3)})`); g.addColorStop(1, 'rgba(220,225,255,0)');
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(bolt.x, bolt.y, bolt.r, 0, Math.PI * 2); ctx.fill();
+        } else { ctx.fillStyle = `rgba(238,243,255,${a.toFixed(3)})`; ctx.fillRect(0, 0, W, H); }
       }
       ctx.strokeStyle = `rgba(200,215,235,${L.alpha * dim})`;
       ctx.lineWidth = 1.1;
@@ -5705,8 +5859,8 @@
       ctx.stroke();
       if (L.bolts && now - wx.lastBolt > 4000 && Math.random() < 0.004 * dt) {
         wx.lastBolt = now;
-        if (patchy) { if (blobs.length) { const c = blobs[Math.floor(Math.random() * blobs.length)]; bolt = { x: c.x, y: c.y, r: c.r * 1.3, until: now + 160 }; } }
-        else { wx.flash.classList.remove('bolt'); void wx.flash.offsetWidth; wx.flash.classList.add('bolt'); }
+        if (patchy) { if (blobs.length) { const c = blobs[Math.floor(Math.random() * blobs.length)]; bolt = { x: c.x, y: c.y, r: c.r * 1.6, t: now }; } }
+        else bolt = { t: now };
       }
     };
     wx.raf = requestAnimationFrame(tick);
