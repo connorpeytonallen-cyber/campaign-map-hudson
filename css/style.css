@@ -527,3 +527,7 @@ body.editing .party-token { cursor: grab; }
 .vit-table .btn-row { margin-top: 10px; }
 .vit-btns input[type=number] { display: inline-block !important; width: 64px !important; flex: none; margin: 0 !important; padding: 4px 6px !important; }
 .vit-card.compact .vit-btns input[type=number] { width: 54px !important; padding: 2px 6px !important; font-size: 12px; }
+/* Sanity/hunger penalties on the character sheet */
+.cs-penalty { margin: 4px 0 10px; padding: 9px 11px; border-radius: 8px; border: 1px solid #6b4a1c; background: rgba(251, 146, 60, .08); font-size: 12.5px; color: #f6d9b4; display: grid; gap: 4px; }
+.cs-penalty-hint { color: #a9a499; font-size: 11.5px; }
+.cs-roll.penalized { color: #fb923c; border-color: #7a4a1c; }

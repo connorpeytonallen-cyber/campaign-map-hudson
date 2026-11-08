@@ -2488,11 +2488,30 @@
     Opportunity: 'Spotting and making the most of advantageous moments.'
   };
   const pointsUsed = (s) => PROWESS.reduce((sum, [k]) => sum + (s.stats[k] - 1), 0);
-  // Roll d20 + bonus straight into the dice feed.
-  function rollCheck(label, bonus) {
+  // Sanity and hunger penalties for a check on stat `k` (or one of its sub-stats `sub`).
+  function vitalsEffect(k, sub) {
+    const v = myVitals(), san = tierOf(SANITY_TIERS, v.sanity), hun = tierOf(HUNGER_TIERS, v.hunger);
+    let mod = 0, dis = false;
+    const notes = [];
+    const add = (n, why) => { mod += n; notes.push(`${fmtBonus(n)} ${why}`); };
+    if (san.i === 1 && (sub === 'Composure' || sub === 'Sense')) add(-1, 'shaken');
+    if (san.i === 2 && (k === 'social' || k === 'outlook')) add(-2, 'unraveling');
+    if (san.i === 3) { dis = true; notes.push('disadvantage: broken'); }
+    if (hun.i === 1 && (k === 'wit' || k === 'social')) add(-1, 'peckish');
+    if (hun.i === 2) add(-2, 'hungry');
+    if (hun.i === 3) { dis = true; notes.push('disadvantage: starving'); }
+    return { mod, dis, notes };
+  }
+  // Roll d20 + bonus straight into the dice feed (with any sanity/hunger penalties for that stat).
+  function rollCheck(label, bonus, k, sub) {
     if (isKicked()) { toast('You were removed from the session, so you can’t roll.', 'warn'); return; }
-    const adv = diceAdv;
+    const fx = k ? vitalsEffect(k, sub) : { mod: 0, dis: false, notes: [] };
+    let adv = diceAdv;
     diceAdv = '';
+    // Disadvantage from a condition cancels out advantage, as usual.
+    if (fx.dis) adv = adv === 'adv' ? '' : 'dis';
+    bonus += fx.mod;
+    if (fx.notes.length) label += ' (' + fx.notes.join(', ') + ')';
     const { results, dropped } = rollSet(1, 20, adv);
     const r = results[0];
     const e = { id: uid(), byId: me.id, by: me.name || 'Someone', color: me.color, dm: editing, forName: '', forColor: '', sides: 20, count: 1, mod: bonus, results, total: r + bonus, ts: Date.now(), revealed: false, label, adv, dropped };
@@ -2546,6 +2565,11 @@
     section('P.R.O.W.E.S.S');
     const left = STAT_POINTS - pointsUsed(s);
     const lvLeft = levelPoints(s) - levelSpent(s);
+    // Remind the player when sanity or hunger are changing their rolls.
+    { const vv = myVitals(), st = tierOf(SANITY_TIERS, vv.sanity), ht = tierOf(HUNGER_TIERS, vv.hunger), bits = [];
+      if (st.i) bits.push(`Sanity: ${st.name} (${vv.sanity}%) – ${st.effect}`);
+      if (ht.i) bits.push(`Hunger: ${ht.name} (${vv.hunger}%) – ${ht.effect}`);
+      if (bits.length) { const w = el('div', 'cs-penalty'); bits.forEach((t) => w.appendChild(el('div', null, t))); w.appendChild(el('div', 'cs-penalty-hint', 'Your roll buttons already include these. ↓ means disadvantage.')); body.appendChild(w); } }
     if (left > 0) body.appendChild(el('div', 'cs-points', `${left} of ${STAT_POINTS} points left to spend · every stat starts at 1 · click a bonus to roll it`));
     else if (lvLeft > 0) body.appendChild(el('div', 'cs-points level', `${lvLeft}/${levelPoints(s)} level-up points left · put them into sub-stats`));
     PROWESS.forEach(([k, label, list]) => {
@@ -2565,7 +2589,9 @@
       step.appendChild(val);
       step.appendChild(plus);
       top.appendChild(step);
-      top.appendChild(btn(fmtBonus(statBonus(total)), 'small cs-roll', () => rollCheck(label + ' check', statBonus(total))));
+      const sfx = vitalsEffect(k, null), sb = btn(fmtBonus(statBonus(total) + sfx.mod) + (sfx.dis ? ' ↓' : ''), 'small cs-roll' + (sfx.notes.length ? ' penalized' : ''), () => rollCheck(label + ' check', statBonus(total), k, null));
+      if (sfx.notes.length) sb.title = 'Base ' + fmtBonus(statBonus(total)) + '; ' + sfx.notes.join(', ');
+      top.appendChild(sb);
       card.appendChild(top);
       list.forEach((n) => {
         const row = el('div', 'cs-sub');
@@ -2582,7 +2608,9 @@
         }));
         row.appendChild(st);
         const v = subValue(s, k, n);
-        row.appendChild(btn(fmtBonus(v), 'small cs-roll', () => rollCheck(n + ' check', v)));
+        const fx = vitalsEffect(k, n), rb = btn(fmtBonus(v + fx.mod) + (fx.dis ? ' ↓' : ''), 'small cs-roll' + (fx.notes.length ? ' penalized' : ''), () => rollCheck(n + ' check', v, k, n));
+        if (fx.notes.length) rb.title = 'Base ' + fmtBonus(v) + '; ' + fx.notes.join(', ');
+        row.appendChild(rb);
         card.appendChild(row);
       });
       body.appendChild(card);
