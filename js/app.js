@@ -312,7 +312,8 @@
         size: REGION_SIZES[r.size] ? r.size : 'l', coast: r.coast !== false, rough: r.rough !== false, points, shape: normShape(r.shape),
         labelAt: Array.isArray(r.labelAt) && num(r.labelAt[0]) != null && num(r.labelAt[1]) != null ? [num(r.labelAt[0]), num(r.labelAt[1])] : null,
         labelScale: clampScale(r.labelScale),
-        labelAngle: Math.min(180, Math.max(-180, Math.round(num(r.labelAngle) || 0)))
+        labelAngle: Math.min(180, Math.max(-180, Math.round(num(r.labelAngle) || 0))),
+        erased: !!r.erased && !!normShape(r.shape)
       });
     }
     for (const l of arr(d.locations)) {
@@ -3060,7 +3061,11 @@
     }
     updateDraft();
     if (silent) return;
-    if (m.type === 'brush') { showFog(); return; }
+    if (m.type === 'brush') {
+      const r = m.regionId && byRegion(m.regionId);
+      if (r) showRegionForm(r); else if (m.regionId) showRegions(); else showFog();
+      return;
+    }
     if (m.type === 'quest' && byQuest(m.id)) showQuestForm(byQuest(m.id));
     else if (m.target === 'fog') { if (m.editId && byFog(m.editId)) showFogForm(byFog(m.editId)); else showFog(); }
     else if (m.type === 'region' && m.editId && byRegion(m.editId)) showRegionForm(byRegion(m.editId));
@@ -3113,7 +3118,7 @@
       return;
     }
     let r = editId && byRegion(editId);
-    if (r) { r.points = pts; r.shape = null; }
+    if (r) { r.points = pts; r.shape = null; r.erased = false; }
     else {
       r = { id: uid(), name: 'New region', description: '', color: '#9b6dff', font: 'Cinzel', size: 'l', coast: true, rough: true, points: pts, shape: null };
       data.regions.push(r);
@@ -3589,10 +3594,19 @@
     const cb = el('input');
     cb.type = 'checkbox';
     cb.checked = r.coast;
-    cb.onchange = () => {
+    // Changing the border rebuilds the shape, which brings back any erased parts.
+    const keepErased = async (box, prev) => {
+      if (!r.erased) return true;
+      if (await ask('Changing this rebuilds the region’s shape and brings back the parts you erased.', 'Change it', 'Keep my erasing')) { r.erased = false; return true; }
+      box.checked = prev;
+      return false;
+    };
+    cb.onchange = async () => {
+      if (!(await keepErased(cb, !cb.checked))) return;
       r.coast = cb.checked;
       if (r.coast) traceCoast(r);
       else { r.shape = null; refresh(); }
+      showRegionForm(r);
     };
     cl.appendChild(cb);
     cl.appendChild(document.createTextNode(' Follow the coastline (leave out water)'));
@@ -3601,14 +3615,27 @@
     const rb = el('input');
     rb.type = 'checkbox';
     rb.checked = r.rough;
-    rb.onchange = () => {
+    rb.onchange = async () => {
+      if (!(await keepErased(rb, !rb.checked))) return;
       r.rough = rb.checked;
       if (r.coast) traceCoast(r);
       else { r.shape = null; refresh(); }
+      showRegionForm(r);
     };
     rl.appendChild(rb);
     rl.appendChild(document.createTextNode(' Rough, natural border on land'));
     b.appendChild(rl);
+    const er = el('div', 'btn-row');
+    er.style.marginTop = '10px';
+    er.appendChild(btn('Erase parts', 'small', () => startRegionEraser(r)));
+    if (r.erased) {
+      er.appendChild(btn('Undo all erasing', 'ghost small', () => {
+        r.erased = false; r.shape = null;
+        if (r.coast) traceCoast(r); else refresh();
+        showRegionForm(r);
+      }));
+    }
+    b.appendChild(er);
     b.appendChild(colorField('Color', r.color, (c) => { r.color = c; refresh(); }));
     const foot = el('div', 'form-foot');
     foot.appendChild(btn('Delete region', 'danger', async () => {
@@ -4555,7 +4582,39 @@
     loadClipper().catch(() => toast('Couldn’t load the brush tool. Check your internet connection.', 'error'));
     showBrushPanel();
   }
+  // Erase parts of one region with the same brush.
+  function startRegionEraser(r) {
+    cancelMode(true);
+    popup.remove();
+    setMode({ type: 'brush', regionId: r.id, erase: true, stroke: [], painting: false, last: null },
+      'Drag over the region to erase parts of it · Esc or Done when finished');
+    map.dragPan.disable();
+    loadClipper().catch(() => toast('Couldn’t load the brush tool. Check your internet connection.', 'error'));
+    showRegionEraserPanel();
+  }
+  function showRegionEraserPanel() {
+    const m = mode;
+    const r = byRegion(m.regionId);
+    currentView = 'brush'; setTab(null);
+    const b = body();
+    b.appendChild(el('p', null, `Erasing from “${(r && r.name) || 'unnamed region'}”: drag over the parts you want to cut away.`));
+    b.appendChild(brushSizeField());
+    b.appendChild(el('p', 'tip', 'Zoom in for finer detail; the brush is measured on screen. You can’t pan while erasing, so scroll to zoom and use Done to move around.'));
+    b.appendChild(btn('Done', 'primary', () => { cancelMode(true); if (r) showRegionForm(r); else showRegions(); }));
+  }
+  function brushSizeField() {
+    const sf = el('div', 'field', 'Brush size');
+    sf.style.marginTop = '14px';
+    const sr = el('div', 'size-row');
+    const r = el('input');
+    r.type = 'range'; r.min = '10'; r.max = '160'; r.step = '5'; r.value = String(brushSize);
+    const out = el('span', 'size-val', brushSize + 'px');
+    r.oninput = () => { brushSize = +r.value; out.textContent = brushSize + 'px'; sizeCursor(); };
+    sr.appendChild(r); sr.appendChild(out); sf.appendChild(sr);
+    return sf;
+  }
   function showBrushPanel() {
+    if (mode.regionId) { showRegionEraserPanel(); return; }
     currentView = 'brush'; setTab('fog');
     const b = body();
     const m = mode;
@@ -4565,15 +4624,7 @@
     row.appendChild(btn('Paint', m.erase ? 'small' : 'small primary', () => startBrush((f || data.fog.find((x) => x.active) || newFogArea()).id, false)));
     row.appendChild(btn('Erase', m.erase ? 'small primary' : 'small', () => startBrush(m.id, true)));
     b.appendChild(row);
-    const sf = el('div', 'field', 'Brush size');
-    sf.style.marginTop = '14px';
-    const sr = el('div', 'size-row');
-    const r = el('input');
-    r.type = 'range'; r.min = '10'; r.max = '160'; r.step = '5'; r.value = String(brushSize);
-    const out = el('span', 'size-val', brushSize + 'px');
-    r.oninput = () => { brushSize = +r.value; out.textContent = brushSize + 'px'; sizeCursor(); };
-    sr.appendChild(r); sr.appendChild(out); sf.appendChild(sr);
-    b.appendChild(sf);
+    b.appendChild(brushSizeField());
     b.appendChild(el('p', 'tip', 'Zoom in for finer detail; the brush is measured on screen. You can’t pan while the brush is on, so scroll to zoom and use Done to move around.'));
     b.appendChild(btn('Done', 'primary', () => { const id = m.id; cancelMode(true); const ff = id && byFog(id); if (ff && !m.erase) showFogForm(ff); else showFog(); }));
   }
@@ -4647,7 +4698,14 @@
         const outS = s.map((poly) => poly.map((ring) => ring.map((p) => [Math.round(p[0] * 1e5) / 1e5, Math.round(p[1] * 1e5) / 1e5])).filter((ring) => ring.length >= 4)).filter((poly) => poly.length);
         return outS.length ? outS : null;
       };
-      if (m.erase) {
+      if (m.regionId) {
+        const r = byRegion(m.regionId);
+        if (r) {
+          const left = tidy(pc.difference(regionPolys(r), paint));
+          if (!left) toast('That would erase the whole region. Use “Delete region” instead.', 'warn');
+          else { r.shape = left; r.erased = true; }
+        }
+      } else if (m.erase) {
         data.fog.forEach((f) => { if (f.shape) f.shape = tidy(pc.difference(f.shape, paint)); });
       } else {
         let f = m.id && byFog(m.id);
