@@ -13,7 +13,7 @@ window.MAP_DATA = {
     {
       "id": "pmw4htpzmv9s3",
       "name": "Camp Harmony",
-      "description": "",
+      "description": "“The bridge district around Camp Harmony, where Nickel’s raiders keep the roads and collect the toll. The streets are scavenged clean and patrolled day and night, rough, but the closest thing to safe ground left in Hudson.”",
       "color": "#17665f",
       "font": "IM Fell English",
       "size": "l",
@@ -5320,7 +5320,7 @@ window.MAP_DATA = {
     {
       "id": "pmw7e6e4kuraq",
       "name": "The Stronghold",
-      "description": "",
+      "description": "“Police country. Barbed wire, checkpoints and hand-painted signs mark where Chief Smith’s law begins, and patrols in patched blue uniforms walk the roads with rifles. Looters hang at the crossroads, and strangers get their names written down.”",
       "color": "#591313",
       "font": "IM Fell English",
       "size": "l",
@@ -11809,7 +11809,7 @@ window.MAP_DATA = {
     {
       "id": "pmw7ecambddak",
       "name": "Palmetto",
-      "description": "",
+      "description": "“The long spit behind the marsh, held by Fort Douglas and the town of Breakwater. Searchlights sweep the water at night, patrol boats guard the sandbar, and soldiers check papers on every road. The fog never quite reached it, and the soldiers mean to keep it that way.”",
       "color": "#000059",
       "font": "IM Fell English",
       "size": "l",
@@ -14344,7 +14344,7 @@ window.MAP_DATA = {
     {
       "id": "pmw7ffrqh5w5n",
       "name": "Haint Blue",
-      "description": "",
+      "description": "“Tide flats and oyster beds, where stilt houses lean over the water and porch ceilings are painted pale blue to keep the spirits out. Shell Point’s fishermen have worked these marshes for generations, and Palmetto's patrol boats now tell them where they may fish.”",
       "color": "#804000",
       "font": "IM Fell English",
       "size": "l",
@@ -15125,7 +15125,7 @@ window.MAP_DATA = {
     {
       "id": "pmw7fkg5qjtr0",
       "name": "Sweetgrass",
-      "description": "",
+      "description": "\"The last good farmland on this side of the marsh: bean rows, corn and old fence posts with deed numbers painted on them. Sweetgrass guards its fields with deer rifles, and Palmetto's wagons come every week to take a third of the harvest.”",
       "color": "#004000",
       "font": "IM Fell English",
       "size": "l",
@@ -16316,7 +16316,7 @@ window.MAP_DATA = {
       "titleFont": "",
       "bodyFont": "",
       "textSize": "",
-      "color": "",
+      "color": "#1aff1a",
       "image": "",
       "symbol": "",
       "symbolColor": "",
