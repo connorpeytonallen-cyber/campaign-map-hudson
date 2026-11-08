@@ -327,7 +327,7 @@
         textSize: SIZES[l.textSize] ? l.textSize : '',
         color: safeColor(l.color, ''), image: safeImageSrc(l.image),
         symbol: SYMBOLS[l.symbol] ? l.symbol : '', symbolColor: safeColor(l.symbolColor, ''), scale: clampScale(l.scale),
-        throughFog: !!l.throughFog, mystery: !!l.mystery,
+        throughFog: !!l.throughFog, mystery: !!l.mystery, loot: str(l.loot),
         shops: arr(l.shops).filter(Boolean).map((s) => ({
           id: str(s.id) || uid(), name: str(s.name), keeper: str(s.keeper), description: str(s.description),
           items: str(s.items), image: safeImageSrc(s.image)
@@ -3735,6 +3735,30 @@
       loc.mystery ? ['hidden', '???'] : loc.kind === 'settlement' ? ['settle', 'Settlement'] : null, () => selectPin(loc.id, true))));
     b.appendChild(ul);
   }
+  // DM-only loot notes / loot table for a pin. Never shown to players.
+  const lootLines = (t) => str(t).split('\n').map((s) => s.replace(/^\s*[-*•]\s*/, '').trim()).filter((s) => s && !s.startsWith('#'));
+  function lootBox(loc) {
+    const box = el('div', 'loot-box');
+    box.appendChild(el('h4', null, 'Loot · DM only'));
+    box.appendChild(el('p', 'tip', 'Players never see this. One item per line. Lines starting with # are headings and get skipped when you roll.'));
+    const ta = textInput(loc.loot, (v) => { loc.loot = v; changed(); upd(); }, { multiline: true, rows: 5 });
+    ta.placeholder = '# Chest in the cellar\nSilver locket | 25 gp\nPotion of healing\n3 rounds of .38 ammunition';
+    box.appendChild(ta);
+    const r = el('div', 'btn-row');
+    const out = el('div', 'loot-roll');
+    const roll = btn('🎲 Roll a random item', 'small', () => {
+      const lines = lootLines(loc.loot);
+      if (!lines.length) return;
+      const n = Math.floor(Math.random() * lines.length);
+      out.textContent = `Rolled ${n + 1} of ${lines.length}: ${lines[n]}`;
+    });
+    r.appendChild(roll);
+    box.appendChild(r);
+    box.appendChild(out);
+    const upd = () => { roll.disabled = !lootLines(loc.loot).length; };
+    upd();
+    return box;
+  }
   function showPinForm(loc) {
     currentView = 'pin'; selectedId = loc.id; setTab(null); updateStatus();
     const b = body();
@@ -3762,6 +3786,7 @@
     })));
     b.appendChild(field(loc.kind === 'settlement' ? 'Overview' : 'Description', textInput(loc.description, (v) => { loc.description = v; refresh(); }, { multiline: true, rows: 6 })));
     b.appendChild(el('p', 'tip', '**bold**   *italic*   [link text](https://…)   start a line with "- " for a bullet'));
+    b.appendChild(lootBox(loc));
     const row = el('div', 'row');
     row.appendChild(field('Title font', fontInput(loc.titleFont, `Default (${data.defaults.titleFont})`, (v) => { loc.titleFont = v; refresh(); })));
     row.appendChild(field('Text font', fontInput(loc.bodyFont, `Default (${data.defaults.bodyFont})`, (v) => { loc.bodyFont = v; refresh(); })));

@@ -420,6 +420,13 @@ body.editing .qmarker { cursor: grab; }
 .card-edit { margin-bottom: 8px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: #16161a; }
 .card-edit summary { padding: 10px 0; color: var(--text); font-weight: 600; font-size: 13px; cursor: pointer; }
 .card-edit[open] { padding-bottom: 12px; }
+.loot-box { margin: 4px 0 16px; padding: 12px; border: 1px dashed #6b5a2a; border-radius: 10px; background: rgba(214, 170, 60, .06); }
+.loot-box h4 { margin: 0 0 4px; font: 600 13px var(--ui); color: #e0bb5c; letter-spacing: .04em; }
+.loot-box .tip { margin: 0 0 8px; }
+.loot-box textarea { width: 100%; }
+.loot-box .btn-row { margin-top: 8px; }
+.loot-roll { margin-top: 8px; font-size: 13px; color: #f0d98a; }
+.loot-roll:empty { display: none; }
 .fire-box { margin-top: 18px; padding: 12px; border: 1px solid #4a2a1c; border-radius: 10px; background: rgba(255, 90, 31, .06); }
 .fire-box h4 { margin: 0 0 4px; font: 600 13px var(--ui); color: #ff9a5a; letter-spacing: .04em; }
 .fire-box p { margin: 0 0 10px; font-size: 13px; }
