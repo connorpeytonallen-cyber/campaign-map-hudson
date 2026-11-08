@@ -2220,8 +2220,18 @@
     }
     placeSoundCtl();
   }
+  // The DM's clock: middle of the screen, level with the party box's top bar.
+  function levelClock() {
+    const c = $('#clock'), p = $('#party');
+    if (!c || c.hidden || !p) return;
+    const head = p.querySelector('.party-head'), face = c.querySelector('.clock-face');
+    if (!head || !face) return;
+    const hr = head.getBoundingClientRect();
+    c.style.top = Math.round(hr.top + (hr.height - face.offsetHeight) / 2) + 'px';
+  }
   // Sit just to the right of the party box, whatever its size.
   function placeSoundCtl() {
+    levelClock();
     const box = $('#sound-ctl'), p = $('#party');
     if (!box || box.hidden || !p) return;
     const r = p.getBoundingClientRect();
@@ -3793,7 +3803,7 @@
   function renderClock() {
     applyDaylight();
     let box = $('#clock');
-    if (!box && map) { box = el('div'); box.id = 'clock'; map.getContainer().appendChild(box); }
+    if (!box && map) { box = el('div'); box.id = 'clock'; document.body.appendChild(box); }
     if (!box) return;
     box.innerHTML = '';
     if (!editing) { box.hidden = true; return; } // players never see the time
@@ -3811,6 +3821,7 @@
     else face.disabled = true;
     box.appendChild(face);
     if (editing && clockOpen) box.appendChild(clockPanel());
+    placeSoundCtl();
   }
   function clockPanel() {
     const p = el('div', 'clock-panel');
