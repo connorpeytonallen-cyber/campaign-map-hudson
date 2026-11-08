@@ -418,6 +418,9 @@ body.editing .qmarker { cursor: grab; }
 .card-edit { margin-bottom: 8px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: #16161a; }
 .card-edit summary { padding: 10px 0; color: var(--text); font-weight: 600; font-size: 13px; cursor: pointer; }
 .card-edit[open] { padding-bottom: 12px; }
+.fire-box { margin-top: 18px; padding: 12px; border: 1px solid #4a2a1c; border-radius: 10px; background: rgba(255, 90, 31, .06); }
+.fire-box h4 { margin: 0 0 4px; font: 600 13px var(--ui); color: #ff9a5a; letter-spacing: .04em; }
+.fire-box p { margin: 0 0 10px; font-size: 13px; }
 .reveal-box { display: grid; gap: 10px; margin-bottom: 16px; padding: 12px; border: 1px dashed #4a4a52; border-radius: 10px; color: var(--muted); font-size: 13px; }
 .reveal-box.on { border: 1px solid #2f6b4c; color: #8fdcb2; }
 .reveal-box .btn { justify-self: start; }

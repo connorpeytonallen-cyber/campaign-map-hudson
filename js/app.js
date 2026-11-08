@@ -355,6 +355,7 @@
     }
     const fs = d.fogStyle && typeof d.fogStyle === 'object' ? d.fogStyle : {};
     const rng = (v, lo, hi, def) => { v = num(v); return v == null ? def : Math.min(hi, Math.max(lo, v)); };
+    out.fire = normShape(d.fire);
     out.fogStyle = {
       look: FOG_LOOKS[fs.look] ? fs.look : FOG_DEFAULT.look,
       darkness: rng(fs.darkness, 0, 1, FOG_DEFAULT.darkness),
@@ -441,7 +442,15 @@
     const fogData = fogCollections(); // fog is in the very first frame, so nothing peeks through while loading
     const layers = baseLayers('base');
     const at = layers.findIndex((l) => l.id === 'roads-minor');
-    layers.splice(at, 0, { id: 'regions-fill', type: 'fill', source: 'regions', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.16 } });
+    layers.splice(at, 0,
+      { id: 'regions-fill', type: 'fill', source: 'regions', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.16 } },
+      { id: 'regions-disputed', type: 'fill', source: 'disputed', paint: { 'fill-pattern': ['get', 'pat'], 'fill-opacity': 0.5 } });
+    // Fire: a warm glow under each little flame. Above the streets, under the fog.
+    const fz = (a, b, c) => ['interpolate', ['exponential', 1.6], ['zoom'], 10, ['*', ['get', 's'], a], 14, ['*', ['get', 's'], b], 18, ['*', ['get', 's'], c]];
+    layers.push(
+      { id: 'fire-glow', type: 'circle', source: 'fire', paint: { 'circle-color': '#ff6a1a', 'circle-radius': fz(3, 14, 60), 'circle-blur': 1, 'circle-opacity': 0.1 } },
+      { id: 'fire-flames', type: 'symbol', source: 'fire', layout: { 'icon-image': ['concat', 'flame-', ['to-string', ['get', 'v']]], 'icon-size': fz(0.22, 0.95, 3.8), 'icon-anchor': 'bottom', 'icon-allow-overlap': true, 'icon-ignore-placement': true } }
+    );
     layers.push(
       { id: 'fog-haze', type: 'line', source: 'fog-soft', filter: ['==', ['get', 'active'], true], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#1e1e24', 'line-width': 90, 'line-blur': 80, 'line-opacity': 0.55 } },
       { id: 'fog-edge', type: 'line', source: 'fog-soft', filter: ['==', ['get', 'active'], true], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#1c1c21', 'line-width': 34, 'line-blur': 28, 'line-opacity': 0.9 } },
@@ -474,7 +483,7 @@
     // Region outlines go under the fog; the drawing preview stays on top of everything.
     const rl = layers.findIndex((l) => l.id === 'regions-line'), fe = layers.findIndex((l) => l.id === 'fog-haze');
     layers.splice(fe, 0, layers.splice(rl, 1)[0]);
-    return { version: 8, sources: { base: source, regions: { type: 'geojson', data: empty }, /* Fog tiles are only cut up to a middling zoom and simply enlarged past it, so zooming in fast never
+    return { version: 8, sources: { base: source, regions: { type: 'geojson', data: empty }, disputed: { type: 'geojson', data: empty }, fire: { type: 'geojson', data: empty },/* Fog tiles are only cut up to a middling zoom and simply enlarged past it, so zooming in fast never
     // waits on new fog tiles (which used to leave black squares for a moment). */ fog: { type: 'geojson', data: fogData.fog, maxzoom: 13 }, 'fog-soft': { type: 'geojson', data: fogData.soft, tolerance: 5, buffer: 256, maxzoom: 15 }, draft: { type: 'geojson', data: empty }, ruler: { type: 'geojson', data: empty }, daylight: { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[[-179, -84], [179, -84], [179, 84], [-179, 84], [-179, -84]]] } } } }, layers };
   }
 
@@ -534,8 +543,11 @@
       } catch (e) { shown = false; setTimeout(showBase, 200); }
     };
     map.on('sourcedata', (e) => { if (e.sourceId === 'fog' && map.isSourceLoaded('fog')) requestAnimationFrame(showBase); });
-    map.on('load', () => { styleReady = true; fitSize(); renderFog(); renderRegions(); renderClock(); applyTerrain(); setTimeout(showBase, 3000); });
-    map.on('styleimagemissing', (e) => { if ((e.id === 'fog-tex' || e.id === 'fog-wisp') && !map.hasImage(e.id)) { buildFogLook(); pushFogImages(); startFogAnim(); } });
+    map.on('load', () => { styleReady = true; fitSize(); renderFog(); renderRegions(); renderFire(); renderClock(); applyTerrain(); setTimeout(showBase, 3000); });
+    map.on('styleimagemissing', (e) => {
+      if ((e.id === 'fog-tex' || e.id === 'fog-wisp') && !map.hasImage(e.id)) { buildFogLook(); pushFogImages(); startFogAnim(); }
+      if (/^flame-\d$/.test(e.id) && !map.hasImage(e.id)) fireFrame();
+    });
     if (window.ResizeObserver) new ResizeObserver(() => fitSize()).observe(map.getContainer());
     lockZoom();
     window.addEventListener('resize', fitSize);
@@ -770,6 +782,104 @@
     }
     if (st.pulse) setWispOpacity();
   }
+  // ===== Fire =====
+  // Burning areas painted by the DM, drawn as lots of separate little flames scattered in loose
+  // clumps (no filled sheet, so there's no visible edge). Each flame flickers on its own.
+  const FLAME_W = 48, FLAME_H = 70, FLAME_KINDS = 4;
+  const fireFx = { cv: null, t: 0, last: 0, raf: 0, box: null };
+  const hash2 = (x, y, s) => { const h = Math.sin(x * 127.1 + y * 311.7 + s * 74.7) * 43758.5453; return h - Math.floor(h); };
+  // Smooth random field 0..1 (for clumping the flames together).
+  function clumpNoise(x, y) {
+    const x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0, f = (t) => t * t * (3 - 2 * t);
+    const a = hash2(x0, y0, 1), b = hash2(x0 + 1, y0, 1), c = hash2(x0, y0 + 1, 1), d = hash2(x0 + 1, y0 + 1, 1);
+    return a + (b - a) * f(fx) + (c - a) * f(fy) + (a - b - c + d) * f(fx) * f(fy);
+  }
+  // Scatter flame points inside the burning area: a jittered grid, thinned out into clumps.
+  function fireSites(shape) {
+    const box = polysBox(shape);
+    let step = 0.00035;
+    const cells = ((box[2] - box[0]) / step) * ((box[3] - box[1]) / step);
+    if (cells > 14000) step *= Math.sqrt(cells / 14000);
+    const k = Math.cos(((box[1] + box[3]) / 2) * Math.PI / 180), sx = step / k;
+    const out = [];
+    for (let gx = Math.floor(box[0] / sx); gx * sx <= box[2]; gx++) {
+      for (let gy = Math.floor(box[1] / step); gy * step <= box[3]; gy++) {
+        const x = (gx + hash2(gx, gy, 2)) * sx, y = (gy + hash2(gx, gy, 3)) * step;
+        if (!inShape(shape, x, y)) continue;
+        const c = clumpNoise(gx / 9, gy / 9);
+        if (c < 0.42 || hash2(gx, gy, 4) > (c - 0.42) * 6) continue; // tight clumps with gaps between them
+        out.push({ type: 'Feature', properties: { v: Math.floor(hash2(gx, gy, 5) * FLAME_KINDS), s: +(0.55 + c * 0.75 + hash2(gx, gy, 6) * 0.3).toFixed(2) }, geometry: { type: 'Point', coordinates: [+x.toFixed(6), +y.toFixed(6)] } });
+      }
+    }
+    return out;
+  }
+  // Draw one flickering flame (a few kinds, each out of step with the others).
+  function drawFlame(g, kind, t) {
+    const W = FLAME_W, H = FLAME_H, p = kind * 1.9;
+    g.clearRect(0, 0, W, H);
+    const fl = Math.sin(t * 11 + p) * 0.5 + Math.sin(t * 17.3 + p * 2) * 0.3 + Math.sin(t * 6.1 + p) * 0.2;
+    const h = H * (0.72 + 0.16 * fl), w = W * (0.3 + 0.04 * Math.sin(t * 9 + p)), sway = Math.sin(t * 4.7 + p) * 4.5 + fl * 2;
+    const bx = W / 2, by = H - 5;
+    const tongue = (scale, colors) => {
+      const hh = h * scale, ww = w * scale, tx = bx + sway * scale, ty = by - hh;
+      g.beginPath();
+      g.moveTo(bx, by);
+      g.bezierCurveTo(bx - ww * 1.25, by - hh * 0.25, bx - ww * 0.55, by - hh * 0.7, tx, ty);
+      g.bezierCurveTo(bx + ww * 0.55, by - hh * 0.7, bx + ww * 1.25, by - hh * 0.25, bx, by);
+      const gr = g.createLinearGradient(0, by, 0, ty);
+      colors.forEach(([o, c]) => gr.addColorStop(o, c));
+      g.fillStyle = gr;
+      g.fill();
+    };
+    g.globalCompositeOperation = 'lighter';
+    tongue(1, [[0, 'rgba(200,40,8,0.85)'], [0.45, 'rgba(240,96,20,0.75)'], [1, 'rgba(255,140,40,0)']]);
+    tongue(0.68, [[0, 'rgba(255,150,40,0.9)'], [0.6, 'rgba(255,190,70,0.7)'], [1, 'rgba(255,220,120,0)']]);
+    tongue(0.38, [[0, 'rgba(255,240,190,0.95)'], [1, 'rgba(255,230,160,0)']]);
+    g.globalCompositeOperation = 'source-over';
+  }
+  function fireFrame() {
+    if (!fireFx.cv) { fireFx.cv = document.createElement('canvas'); fireFx.cv.width = FLAME_W; fireFx.cv.height = FLAME_H; }
+    const g = fireFx.cv.getContext('2d', { willReadFrequently: true });
+    for (let k = 0; k < FLAME_KINDS; k++) {
+      drawFlame(g, k, fireFx.t);
+      const img = g.getImageData(0, 0, FLAME_W, FLAME_H), id = 'flame-' + k;
+      try {
+        if (map.hasImage(id)) map.updateImage(id, img);
+        else map.addImage(id, img, { pixelRatio: 2 });
+      } catch (e) { /* not ready */ }
+    }
+  }
+  const fireOnScreen = () => {
+    if (!fireFx.box) return false;
+    const b = map.getBounds(), x = fireFx.box;
+    return x[0] <= b.getEast() && x[2] >= b.getWest() && x[1] <= b.getNorth() && x[3] >= b.getSouth();
+  };
+  function fireTick(now) {
+    fireFx.raf = 0;
+    if (!styleReady || !data.fire) return;
+    fireFx.raf = requestAnimationFrame(fireTick);
+    if (REDUCED_MOTION) return;
+    if (fireFx.last && now - fireFx.last < FOG_FRAME_MS) return;
+    const dt = fireFx.last ? Math.min(0.25, (now - fireFx.last) / 1000) : 0;
+    fireFx.last = now;
+    if (map.isMoving() || !fireOnScreen()) return;
+    fireFx.t += dt;
+    fireFrame();
+    try { map.setPaintProperty('fire-glow', 'circle-opacity', 0.1 + 0.04 * Math.sin(fireFx.t * 5.3) * Math.sin(fireFx.t * 2.1 + 1)); } catch (e) { /* busy */ }
+  }
+  let fireKey = '', fireFeatures = [];
+  function renderFire() {
+    if (!styleReady) return;
+    const s = data.fire;
+    fireFx.box = s ? polysBox(s) : null;
+    const key = s ? JSON.stringify(s) : '';
+    if (key !== fireKey) { fireKey = key; fireFeatures = s ? fireSites(s) : []; }
+    map.getSource('fire').setData({ type: 'FeatureCollection', features: fireFeatures });
+    if (!map.hasImage('flame-0')) fireFrame();
+    if (s && !fireFx.raf) { fireFx.last = 0; fireFx.raf = requestAnimationFrame(fireTick); }
+  }
+  const onFire = (lng, lat) => inShape(data.fire, lng, lat);
+
   const activeFog = () => data.fog.filter((f) => f.active);
   function inRing(ring, x, y) {
     let c = false;
@@ -860,6 +970,7 @@
     renderMarkers();
     renderQuestMarkers();
     renderRegions();
+    renderFire();
     applyTitle();
     updateLogBadge();
     renderLog();
@@ -1108,6 +1219,100 @@
   const outlineRing = (r) => (r.rough ? roughRing(r.points, r.id) : [...r.points, r.points[0]]);
   const regionPolys = (r) => (r.shape ? r.shape : [[outlineRing(r)]]);
   const regionGeom = (r) => ({ type: 'MultiPolygon', coordinates: regionPolys(r) });
+  const polysBox = (polys) => {
+    const b = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const p of polys) for (const [x, y] of p[0]) { if (x < b[0]) b[0] = x; if (y < b[1]) b[1] = y; if (x > b[2]) b[2] = x; if (y > b[3]) b[3] = y; }
+    return b;
+  };
+  const boxesMeet = (a, b) => a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
+  const polysArea = (polys) => polys.reduce((s, p) => s + ringArea(p[0]) - p.slice(1).reduce((h, r) => h + ringArea(r), 0), 0);
+  function tidyShape(s) {
+    if (!s || !s.length) return null;
+    const out = s.map((poly) => poly.map((ring) => ring.map((p) => [Math.round(p[0] * 1e5) / 1e5, Math.round(p[1] * 1e5) / 1e5])).filter((ring) => ring.length >= 4)).filter((poly) => poly.length);
+    return out.length ? out : null;
+  }
+  // Where two traced coastlines meet, cutting one shape from another leaves hundreds of hairline
+  // crumbs. Drop pieces (and holes) that are a tiny fraction of the whole.
+  function dropSlivers(s, total, frac = 0.004) {
+    if (!s) return null;
+    const out = s.filter((p) => ringArea(p[0]) > total * frac).map((p) => p.filter((ring, i) => i === 0 || ringArea(ring) > total * frac / 4));
+    return out.length ? out : null;
+  }
+  // Other regions whose area could touch these shapes.
+  function regionsNear(r, polys) {
+    const box = polysBox(polys);
+    return data.regions.filter((o) => o !== r && o.points.length >= 3 && boxesMeet(box, polysBox(regionPolys(o))));
+  }
+  // Cut other regions out of a shape, so a new region traces around its neighbours instead of overlapping them.
+  function withoutOthers(r, polys) {
+    const pc = window.polygonClipping;
+    const others = regionsNear(r, polys);
+    if (!pc || !others.length) return polys;
+    try {
+      const left = dropSlivers(tidyShape(pc.difference(polys, ...others.map(regionPolys))), polysArea(polys));
+      if (!left || polysArea(left) < polysArea(polys) * 0.01) {
+        toast('This region sits almost entirely inside another one, so it was left overlapping (shown as disputed land).', 'warn', 7000);
+        return polys;
+      }
+      return left;
+    } catch (e) { return polys; }
+  }
+  // Rebuild a region's shape from its outline: coastline (if on), minus neighbouring regions.
+  function rebuildRegionShape(r) {
+    if (r.coast) { traceCoast(r); return; }
+    const outline = [[outlineRing(r)]];
+    const s = withoutOthers(r, outline);
+    r.shape = s === outline ? null : s;
+    renderRegions(); changed();
+  }
+  // Land claimed by two regions at once: worked out from the overlaps and drawn striped.
+  const disputeCache = new Map();
+  const shapeKey = (r) => r.rough + '|' + (r.shape ? JSON.stringify(r.shape) : JSON.stringify(r.points));
+  function disputedZones(list) {
+    const pc = window.polygonClipping;
+    if (!pc) return [];
+    const out = [];
+    const boxes = list.map((r) => polysBox(regionPolys(r)));
+    const seen = new Set();
+    for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+      if (!boxesMeet(boxes[i], boxes[j])) continue;
+      const a = list[i], b = list[j];
+      const key = a.id + '~' + b.id;
+      seen.add(key);
+      const k2 = shapeKey(a) + '#' + shapeKey(b);
+      let hit = disputeCache.get(key);
+      if (!hit || hit.k !== k2) {
+        let s = null;
+        try {
+          s = dropSlivers(tidyShape(pc.intersection(regionPolys(a), regionPolys(b))), Math.min(polysArea(regionPolys(a)), polysArea(regionPolys(b))), 0.006);
+        } catch (e) { s = null; }
+        hit = { k: k2, s };
+        disputeCache.set(key, hit);
+      }
+      if (hit.s) out.push({ a, b, shape: hit.s });
+    }
+    for (const k of disputeCache.keys()) if (!seen.has(k)) disputeCache.delete(k);
+    return out;
+  }
+  // Diagonal stripes in both claimants' colours.
+  function disputePattern(ca, cb) {
+    const id = 'dsp-' + ca + '-' + cb;
+    if (map.hasImage(id)) return id;
+    const n = 24, c = document.createElement('canvas');
+    c.width = c.height = n;
+    const g = c.getContext('2d');
+    const band = (col, off) => {
+      g.fillStyle = col;
+      for (const s of [-n, 0, n]) {
+        g.beginPath();
+        g.moveTo(s + off, 0); g.lineTo(s + off + n / 4, 0); g.lineTo(s + off + n / 4 - n, n); g.lineTo(s + off - n, n);
+        g.closePath(); g.fill();
+      }
+    };
+    band(ca, 0); band(cb, n / 2);
+    map.addImage(id, g.getImageData(0, 0, n, n), { pixelRatio: 2 });
+    return id;
+  }
   function ringArea(ring) {
     let a = 0;
     for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) a += (ring[j][0] + ring[i][0]) * (ring[j][1] - ring[i][1]);
@@ -1170,6 +1375,13 @@
       map.getSource('regions').setData({
         type: 'FeatureCollection',
         features: list.map((r) => ({ type: 'Feature', properties: { id: r.id, color: r.color }, geometry: regionGeom(r) }))
+      });
+      map.getSource('disputed').setData({
+        type: 'FeatureCollection',
+        features: disputedZones(list).map(({ a, b, shape }) => ({
+          type: 'Feature', properties: { a: a.id, b: b.id, pat: disputePattern(safeColor(a.color), safeColor(b.color)) },
+          geometry: { type: 'MultiPolygon', coordinates: shape }
+        }))
       });
     }
     list.forEach((r) => {
@@ -1329,6 +1541,16 @@
     if (editing && ruler.active) { rulerClick(e.lngLat); return; }
     if (editing && mode) { handleModeClick(e.lngLat); return; }
     if (fogged(e.lngLat.lng, e.lngLat.lat)) { popup.remove(); return; }
+    const dz = !editing && styleReady && map.queryRenderedFeatures(e.point, { layers: ['regions-disputed'] })[0];
+    const ra = dz && byRegion(dz.properties.a), rb = dz && byRegion(dz.properties.b);
+    if (ra && rb) {
+      const an = ra.name || 'Unnamed region', bn = rb.name || 'Unnamed region';
+      showPopup('disputed:' + ra.id + '~' + rb.id, e.lngLat, card({
+        kicker: 'Disputed land', title: an + ' / ' + bn, titleFont: ra.font, bodyFont: data.defaults.bodyFont,
+        color: ra.color, size: data.defaults.textSize, description: `Both ${an} and ${bn} claim this land.`
+      }), 0);
+      return;
+    }
     const hit = styleReady && map.queryRenderedFeatures(e.point, { layers: ['regions-fill'] })[0];
     const region = hit && byRegion(hit.properties.id);
     if (region) {
@@ -3031,6 +3253,7 @@
     else if (currentView === 'ruler') showRuler();
     else if (currentView === 'stickers' || currentView === 'sticker') showStickers();
     else if (currentView === 'foglook') showFogLook();
+    else if (currentView === 'brush' && mode && mode.type === 'brush') showBrushPanel();
     else if (currentView === 'fog' || currentView === 'fogarea' || currentView === 'brush') showFog();
     else if (currentView === 'settings') showSettings();
     else if (currentView === 'regions' || currentView === 'region') showRegions();
@@ -3063,7 +3286,7 @@
     if (silent) return;
     if (m.type === 'brush') {
       const r = m.regionId && byRegion(m.regionId);
-      if (r) showRegionForm(r); else if (m.regionId) showRegions(); else showFog();
+      if (r) showRegionForm(r); else if (m.regionId || m.fire) showRegions(); else showFog();
       return;
     }
     if (m.type === 'quest' && byQuest(m.id)) showQuestForm(byQuest(m.id));
@@ -3123,6 +3346,8 @@
       r = { id: uid(), name: 'New region', description: '', color: '#9b6dff', font: 'Cinzel', size: 'l', coast: true, rough: true, points: pts, shape: null };
       data.regions.push(r);
     }
+    // Trace around any regions already there instead of overlapping them.
+    if (!r.coast) { const o = [[outlineRing(r)]], s = withoutOthers(r, o); if (s !== o) r.shape = s; }
     renderRegions(); changed(); showRegionForm(r);
     const n = $('#rf-name'); if (n) { n.focus(); n.select(); }
     if (r.coast) traceCoast(r);
@@ -3186,8 +3411,16 @@
       }
       const cur = byRegion(id);
       if (!cur || !cur.coast) return;
-      cur.shape = shape;
+      // Then trace around neighbouring regions too.
+      const base = shape || outline.length && [outline];
+      const clipped = withoutOthers(cur, base);
+      cur.shape = clipped === base ? shape : clipped;
       renderRegions(); changed();
+      if (currentView === 'region' && selectedId === id) {
+        const typing = document.activeElement && document.activeElement.id === 'rf-name';
+        showRegionForm(cur);
+        if (typing) { const n = $('#rf-name'); if (n) { n.focus(); n.select(); } }
+      }
       toast(shape ? 'Coastline traced: water is left out of the region.' : 'No coastline in this area, so the shape stays as drawn.', 'ok');
     } catch (e) {
       toast('Couldn’t trace the coastline (' + e.message + '). The shape stays as drawn.', 'warn', 7000);
@@ -3522,10 +3755,26 @@
     currentView = 'regions'; selectedId = null; setTab('regions'); updateStatus(); popup.remove();
     const b = body();
     b.appendChild(btn('+ Draw region', 'primary list-add', () => startDrawing()));
-    if (!data.regions.length) { b.appendChild(el('p', 'muted', 'No regions yet. Regions are shaded areas with a big name, for kingdoms, forests, wastelands…')); return; }
-    const ul = el('ul', 'pin-list');
-    data.regions.forEach((r) => ul.appendChild(listButton(r.color, r.name || 'Unnamed region', null, () => selectRegion(r.id, null, true))));
-    b.appendChild(ul);
+    if (!data.regions.length) b.appendChild(el('p', 'muted', 'No regions yet. Regions are shaded areas with a big name, for kingdoms, forests, wastelands…'));
+    else {
+      const ul = el('ul', 'pin-list');
+      data.regions.forEach((r) => ul.appendChild(listButton(r.color, r.name || 'Unnamed region', null, () => selectRegion(r.id, null, true))));
+      b.appendChild(ul);
+    }
+    const fire = el('div', 'fire-box');
+    fire.appendChild(el('h4', null, 'Fire'));
+    fire.appendChild(el('p', 'muted', data.fire ? 'Part of the map is burning.' : 'Nothing is on fire.'));
+    const fr = el('div', 'btn-row');
+    fr.appendChild(btn('Set fire', 'small', () => startFireBrush(false)));
+    if (data.fire) {
+      fr.appendChild(btn('Put out', 'small', () => startFireBrush(true)));
+      fr.appendChild(btn('Put out all', 'ghost small', async () => {
+        if (!(await ask('Put out every fire on the map?', 'Put them out', 'Keep burning'))) return;
+        data.fire = null; renderFire(); changed(); showRegions();
+      }));
+    }
+    fire.appendChild(fr);
+    b.appendChild(fire);
   }
   function startDrawing(editId, target) {
     setMode({ type: 'region', points: [], editId, target: target || 'region' }, 'Click to add corners · double-click or Enter to finish · Backspace undoes · Esc cancels');
@@ -3597,15 +3846,14 @@
     // Changing the border rebuilds the shape, which brings back any erased parts.
     const keepErased = async (box, prev) => {
       if (!r.erased) return true;
-      if (await ask('Changing this rebuilds the region’s shape and brings back the parts you erased.', 'Change it', 'Keep my erasing')) { r.erased = false; return true; }
+      if (await ask('Changing this rebuilds the region’s shape, which undoes your brush changes (erased parts, added land and disputed claims).', 'Change it', 'Keep my changes')) { r.erased = false; return true; }
       box.checked = prev;
       return false;
     };
     cb.onchange = async () => {
       if (!(await keepErased(cb, !cb.checked))) return;
       r.coast = cb.checked;
-      if (r.coast) traceCoast(r);
-      else { r.shape = null; refresh(); }
+      rebuildRegionShape(r);
       showRegionForm(r);
     };
     cl.appendChild(cb);
@@ -3618,8 +3866,7 @@
     rb.onchange = async () => {
       if (!(await keepErased(rb, !rb.checked))) return;
       r.rough = rb.checked;
-      if (r.coast) traceCoast(r);
-      else { r.shape = null; refresh(); }
+      rebuildRegionShape(r);
       showRegionForm(r);
     };
     rl.appendChild(rb);
@@ -3627,15 +3874,27 @@
     b.appendChild(rl);
     const er = el('div', 'btn-row');
     er.style.marginTop = '10px';
-    er.appendChild(btn('Erase parts', 'small', () => startRegionEraser(r)));
+    er.appendChild(btn('Add land', 'small', () => startRegionBrush(r, 'add')));
+    er.appendChild(btn('Claim disputed land', 'small', () => startRegionBrush(r, 'claim')));
+    er.appendChild(btn('Erase parts', 'small', () => startRegionBrush(r, 'erase')));
+    b.appendChild(er);
+    const disputes = [...disputeCache.entries()].filter(([k, v]) => v.s && k.split('~').includes(r.id))
+      .map(([k]) => byRegion(k.split('~').find((x) => x !== r.id))).filter(Boolean);
+    if (disputes.length) {
+      b.appendChild(el('p', 'tip', 'Disputed with ' + disputes.map((o) => o.name || 'an unnamed region').join(', ') + '. The shared land shows striped.'));
+      b.appendChild(btn('Give up the disputed land', 'ghost small', () => {
+        const s = withoutOthers(r, regionPolys(r));
+        if (s !== regionPolys(r)) { r.shape = s; r.erased = true; }
+        refresh(); showRegionForm(r);
+      }));
+    }
     if (r.erased) {
-      er.appendChild(btn('Undo all erasing', 'ghost small', () => {
+      b.appendChild(btn('Undo brush changes', 'ghost small', () => {
         r.erased = false; r.shape = null;
-        if (r.coast) traceCoast(r); else refresh();
+        rebuildRegionShape(r);
         showRegionForm(r);
       }));
     }
-    b.appendChild(er);
     b.appendChild(colorField('Color', r.color, (c) => { r.color = c; refresh(); }));
     const foot = el('div', 'form-foot');
     foot.appendChild(btn('Delete region', 'danger', async () => {
@@ -4582,25 +4841,60 @@
     loadClipper().catch(() => toast('Couldn’t load the brush tool. Check your internet connection.', 'error'));
     showBrushPanel();
   }
-  // Erase parts of one region with the same brush.
-  function startRegionEraser(r) {
+  // Reshape one region with the brush:
+  //   add   – paint on more land (it stops at other regions' borders)
+  //   claim – paint into a neighbour's land too; the overlap shows as disputed
+  //   erase – cut parts away
+  const REGION_BRUSH = {
+    add: ['Add land', 'Drag to add land to this region. It stops at other regions’ borders.'],
+    claim: ['Claim disputed land', 'Drag over a neighbouring region to claim part of it. Land claimed by both shows striped as disputed.'],
+    erase: ['Erase', 'Drag over the parts you want to cut away. Erasing a disputed strip hands it back to the other region.']
+  };
+  function startRegionBrush(r, kind) {
     cancelMode(true);
     popup.remove();
-    setMode({ type: 'brush', regionId: r.id, erase: true, stroke: [], painting: false, last: null },
-      'Drag over the region to erase parts of it · Esc or Done when finished');
+    setMode({ type: 'brush', regionId: r.id, kind, erase: kind === 'erase', stroke: [], painting: false, last: null },
+      REGION_BRUSH[kind][1].split('.')[0] + ' · Esc or Done when finished');
     map.dragPan.disable();
     loadClipper().catch(() => toast('Couldn’t load the brush tool. Check your internet connection.', 'error'));
-    showRegionEraserPanel();
+    showRegionBrushPanel();
   }
-  function showRegionEraserPanel() {
+  function showRegionBrushPanel() {
     const m = mode;
     const r = byRegion(m.regionId);
     currentView = 'brush'; setTab(null);
     const b = body();
-    b.appendChild(el('p', null, `Erasing from “${(r && r.name) || 'unnamed region'}”: drag over the parts you want to cut away.`));
+    b.appendChild(el('p', null, `Reshaping “${(r && r.name) || 'unnamed region'}”`));
+    const row = el('div', 'btn-row');
+    for (const k of Object.keys(REGION_BRUSH)) row.appendChild(btn(REGION_BRUSH[k][0], k === m.kind ? 'small primary' : 'small', () => r && startRegionBrush(r, k)));
+    b.appendChild(row);
+    b.appendChild(el('p', 'muted', REGION_BRUSH[m.kind][1]));
     b.appendChild(brushSizeField());
-    b.appendChild(el('p', 'tip', 'Zoom in for finer detail; the brush is measured on screen. You can’t pan while erasing, so scroll to zoom and use Done to move around.'));
+    b.appendChild(el('p', 'tip', 'Zoom in for finer detail; the brush is measured on screen. You can’t pan while the brush is on, so scroll to zoom and use Done to move around.'));
     b.appendChild(btn('Done', 'primary', () => { cancelMode(true); if (r) showRegionForm(r); else showRegions(); }));
+  }
+  // Paint or put out fire.
+  function startFireBrush(erase) {
+    cancelMode(true);
+    popup.remove();
+    setMode({ type: 'brush', fire: true, erase, stroke: [], painting: false, last: null },
+      erase ? 'Drag over flames to put them out · Esc or Done when finished' : 'Drag over the map to set it on fire · Esc or Done when finished');
+    map.dragPan.disable();
+    loadClipper().catch(() => toast('Couldn’t load the brush tool. Check your internet connection.', 'error'));
+    showFireBrushPanel();
+  }
+  function showFireBrushPanel() {
+    const m = mode;
+    currentView = 'brush'; setTab('regions');
+    const b = body();
+    b.appendChild(el('p', null, m.erase ? 'Putting out fire: drag over the flames to clear them.' : 'Setting fire: drag over the map where it’s burning.'));
+    const row = el('div', 'btn-row');
+    row.appendChild(btn('Burn', m.erase ? 'small' : 'small primary', () => startFireBrush(false)));
+    row.appendChild(btn('Put out', m.erase ? 'small primary' : 'small', () => startFireBrush(true)));
+    b.appendChild(row);
+    b.appendChild(brushSizeField());
+    b.appendChild(el('p', 'tip', 'Players see the flames once you publish. Fire under the fog stays hidden until the fog lifts.'));
+    b.appendChild(btn('Done', 'primary', () => { cancelMode(true); showRegions(); }));
   }
   function brushSizeField() {
     const sf = el('div', 'field', 'Brush size');
@@ -4614,7 +4908,8 @@
     return sf;
   }
   function showBrushPanel() {
-    if (mode.regionId) { showRegionEraserPanel(); return; }
+    if (mode.regionId) { showRegionBrushPanel(); return; }
+    if (mode.fire) { showFireBrushPanel(); return; }
     currentView = 'brush'; setTab('fog');
     const b = body();
     const m = mode;
@@ -4700,11 +4995,18 @@
       };
       if (m.regionId) {
         const r = byRegion(m.regionId);
-        if (r) {
+        if (r && m.kind === 'erase') {
           const left = tidy(pc.difference(regionPolys(r), paint));
           if (!left) toast('That would erase the whole region. Use “Delete region” instead.', 'warn');
           else { r.shape = left; r.erased = true; }
+        } else if (r) {
+          // "Add land" stops at the neighbours' borders; "Claim" paints right over them.
+          const others = m.kind === 'add' ? regionsNear(r, paint) : [];
+          const extra = others.length ? dropSlivers(tidy(pc.difference(paint, ...others.map(regionPolys))), polysArea(paint), 0.01) : paint;
+          if (extra) { r.shape = tidy(pc.union(regionPolys(r), extra)); r.erased = true; }
         }
+      } else if (m.fire) {
+        data.fire = m.erase ? (data.fire ? tidy(pc.difference(data.fire, paint)) : null) : tidy(data.fire ? pc.union(data.fire, paint) : paint);
       } else if (m.erase) {
         data.fog.forEach((f) => { if (f.shape) f.shape = tidy(pc.difference(f.shape, paint)); });
       } else {
