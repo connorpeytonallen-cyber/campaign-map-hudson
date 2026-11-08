@@ -3185,8 +3185,8 @@ window.MAP_DATA = {
       "status": "done",
       "giver": "Nickel",
       "locationId": "pmw4fyq1snq33",
-      "lng": -79.879628,
-      "lat": 32.795222,
+      "lng": -79.879929,
+      "lat": 32.795028,
       "revealed": true,
       "scale": 1
     }
