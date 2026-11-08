@@ -311,7 +311,8 @@
         color: safeColor(r.color, '#9b6dff'), font: validFont(r.font, 'Cinzel'),
         size: REGION_SIZES[r.size] ? r.size : 'l', coast: r.coast !== false, rough: r.rough !== false, points, shape: normShape(r.shape),
         labelAt: Array.isArray(r.labelAt) && num(r.labelAt[0]) != null && num(r.labelAt[1]) != null ? [num(r.labelAt[0]), num(r.labelAt[1])] : null,
-        labelScale: clampScale(r.labelScale)
+        labelScale: clampScale(r.labelScale),
+        labelAngle: Math.min(180, Math.max(-180, Math.round(num(r.labelAngle) || 0)))
       });
     }
     for (const l of arr(d.locations)) {
@@ -1170,7 +1171,9 @@
       const pos = regionLabelPos(r);
       const at = r.labelAt || pos.pt;
       if (fogged(at[0], at[1])) return;
-      const mk = new maplibregl.Marker({ element: d, anchor: 'center', draggable: editing }).setLngLat(at).addTo(map);
+      const ang = r.labelAngle || 0;
+      // Angled names turn with the map so they keep following the land; straight ones stay level.
+      const mk = new maplibregl.Marker({ element: d, anchor: 'center', draggable: editing, rotation: ang, rotationAlignment: ang ? 'map' : 'viewport', pitchAlignment: 'viewport' }).setLngLat(at).addTo(map);
       if (editing) {
         d.title = 'Drag to move the name';
         d.addEventListener('click', (e) => { e.stopPropagation(); selectRegion(r.id); });
@@ -1202,7 +1205,9 @@
         per1 = measureCtx.measureText(text).width / 100 + 0.2 * text.length; // width per 1px of font size (incl. letter spacing)
         perCache.set(mk, per1);
       }
-      const size = Math.min((w * 0.82) / per1, h * 0.42, REGION_SIZES[r.size]) * (r.labelScale || 1);
+      // An angled name takes up a slanted box, so fit both its length and height to the region.
+      const t = ((r.labelAngle || 0) * Math.PI) / 180, c = Math.abs(Math.cos(t)), s = Math.abs(Math.sin(t));
+      const size = Math.min((w * 0.82) / (per1 * c + 1.95 * s), h / (per1 * s * 1.22 + 2.38 * c), REGION_SIZES[r.size]) * (r.labelScale || 1);
       d.style.display = size < 7 ? 'none' : '';
       d.style.fontSize = Math.max(7, size).toFixed(1) + 'px';
     }
@@ -3549,6 +3554,26 @@
     ns.querySelector('input').min = '0.3';
     ns.querySelector('input').max = '3';
     b.appendChild(ns);
+    const af = el('div', 'field', 'Name angle');
+    const arow = el('div', 'size-row');
+    const ar = el('input');
+    ar.type = 'range'; ar.min = '-90'; ar.max = '90'; ar.step = '1'; ar.value = String(Math.max(-90, Math.min(90, r.labelAngle || 0)));
+    const aout = el('span', 'size-val', (r.labelAngle || 0) + '°');
+    const setAngle = (v) => {
+      r.labelAngle = v;
+      ar.value = String(v);
+      aout.textContent = v + '°';
+      const mk = rlabels.get(r.id);
+      if (mk) { mk.setRotation(v); mk.setRotationAlignment(v ? 'map' : 'viewport'); }
+      fitRegionLabels();
+      changed();
+    };
+    ar.oninput = () => setAngle(+ar.value);
+    arow.appendChild(ar);
+    arow.appendChild(aout);
+    arow.appendChild(btn('Level', 'ghost small', () => setAngle(0)));
+    af.appendChild(arow);
+    b.appendChild(af);
     b.appendChild(el('p', 'tip', 'Drag the name on the map to place it anywhere. At 100% it fits inside the region; it grows as you zoom in.'));
     if (r.labelAt) b.appendChild(btn('Put the name back in the middle', 'small', () => { r.labelAt = null; refresh(); showRegionForm(r); }));
     const cl = el('label', 'check');
