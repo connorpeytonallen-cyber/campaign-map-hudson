@@ -159,6 +159,8 @@ body.editing .region-label:hover { outline: 1px dashed rgba(255, 255, 255, .5); 
 .maplibregl-popup { z-index: 10; }
 .pin.in-fog svg { opacity: .7; filter: blur(.6px) grayscale(.8) brightness(.85) drop-shadow(0 0 6px rgba(200, 200, 215, .35)); }
 .pin.in-fog .pin-label { opacity: .85; font-style: italic; }
+.pin.pin-mystery svg { filter: drop-shadow(0 0 5px rgba(232, 226, 208, .35)); }
+.pin.pin-mystery-dm::after { content: '??'; position: absolute; top: -6px; right: -10px; padding: 1px 4px; border-radius: 6px; background: #2a2a30; color: #e8e2d0; font: 700 10px/1.2 Georgia, serif; border: 1px solid rgba(232, 226, 208, .5); pointer-events: none; }
 .form-foot + .tip { margin-top: 12px; }
 body.editing .sticker { pointer-events: auto; cursor: grab; }
 body.editing .sticker:hover, .sticker.selected { outline: 1px dashed rgba(232, 176, 74, .8); outline-offset: 2px; }

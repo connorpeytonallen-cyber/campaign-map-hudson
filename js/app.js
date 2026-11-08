@@ -327,7 +327,7 @@
         textSize: SIZES[l.textSize] ? l.textSize : '',
         color: safeColor(l.color, ''), image: safeImageSrc(l.image),
         symbol: SYMBOLS[l.symbol] ? l.symbol : '', symbolColor: safeColor(l.symbolColor, ''), scale: clampScale(l.scale),
-        throughFog: !!l.throughFog,
+        throughFog: !!l.throughFog, mystery: !!l.mystery,
         shops: arr(l.shops).filter(Boolean).map((s) => ({
           id: str(s.id) || uid(), name: str(s.name), keeper: str(s.keeper), description: str(s.description),
           items: str(s.items), image: safeImageSrc(s.image)
@@ -1040,16 +1040,25 @@
       `<path d="M15 1.5C7.5 1.5 1.5 7.4 1.5 14.8 1.5 24.8 15 38.5 15 38.5S28.5 24.8 28.5 14.8C28.5 7.4 22.5 1.5 15 1.5z" fill="${color}" stroke="rgba(0,0,0,.6)" stroke-width="1.5"/>` +
       `<g transform="translate(7.2 6.8) scale(.65)"><path d="${SYMBOLS[sym][1]}" fill="${symColor}" fill-rule="evenodd"/></g></svg>`;
   }
+  // A mystery pin: players see a plain dark pin marked "??" and nothing else until the DM reveals it.
+  const isMystery = (loc) => !editing && loc.mystery;
+  function mysterySvg(w, h) {
+    return `<svg viewBox="0 0 30 40" width="${w}" height="${h}" aria-hidden="true">` +
+      `<path d="M15 1.5C7.5 1.5 1.5 7.4 1.5 14.8 1.5 24.8 15 38.5 15 38.5S28.5 24.8 28.5 14.8C28.5 7.4 22.5 1.5 15 1.5z" fill="#2a2a30" stroke="rgba(0,0,0,.7)" stroke-width="1.5"/>` +
+      `<text x="15" y="19.5" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="12" fill="#e8e2d0">??</text></svg>`;
+  }
 
   function addMarker(loc) {
+    if (isMystery(loc)) return addMysteryMarker(loc);
     const big = loc.kind === 'settlement';
     const [w, h] = pinSize(loc);
-    const b = el('button', 'pin' + (big ? ' pin-big' : ''));
+    const b = el('button', 'pin' + (big ? ' pin-big' : '') + (editing && loc.mystery ? ' pin-mystery-dm' : ''));
     b.type = 'button';
     b.dataset.key = 'loc:' + loc.id;
     b.style.width = w + 'px';
     b.style.height = h + 'px';
     b.setAttribute('aria-label', loc.name || 'Untitled place');
+    if (editing && loc.mystery) b.title = 'Mystery pin: players see “??”';
     b.innerHTML = pinSvg(safeColor(loc.color || data.defaults.color), symbolOf(loc), safeColor(loc.symbolColor, '#141414'), w, h);
     const label = el('span', 'pin-label' + (big ? ' always' : ''), loc.name || 'Untitled place');
     if (big) {
@@ -1078,6 +1087,20 @@
       if (popupKey === 'loc:' + loc.id) popup.setLngLat(p);
       changed();
     });
+    markers.set(loc.id, m);
+  }
+  // Players' view of a mystery pin: no name, picture or details, just "??".
+  function addMysteryMarker(loc) {
+    const s = loc.scale || 1, w = Math.round(30 * s), h = Math.round(40 * s);
+    const b = el('button', 'pin pin-mystery');
+    b.type = 'button';
+    b.dataset.key = 'loc:' + loc.id;
+    b.style.width = w + 'px';
+    b.style.height = h + 'px';
+    b.setAttribute('aria-label', 'Unknown place');
+    b.innerHTML = mysterySvg(w, h);
+    b.addEventListener('click', (e) => { e.stopPropagation(); openMysteryPopup(loc); });
+    const m = new maplibregl.Marker({ element: b, anchor: 'bottom' }).setLngLat([loc.lng, loc.lat]).addTo(map);
     markers.set(loc.id, m);
   }
   function removeMarker(id) { const m = markers.get(id); if (m) { m.remove(); markers.delete(id); } }
@@ -1502,11 +1525,19 @@
       color: loc.color || d.color, size: loc.textSize || d.textSize, description: '…'
     }), pinSize(loc)[1] + 2);
   }
+  function openMysteryPopup(loc) {
+    const d = data.defaults;
+    const s = loc.scale || 1;
+    showPopup('loc:' + loc.id, [loc.lng, loc.lat], card({
+      title: '??', titleFont: d.titleFont, bodyFont: d.bodyFont, color: '#6b6b75', size: d.textSize,
+      description: '*Something is here, but you don’t know what yet. Get closer to find out.*'
+    }), Math.round(40 * s) + 2);
+  }
   function questMeta(q) {
     const bits = [QUEST_STATUS[q.status]];
     if (q.giver) bits.push('From ' + q.giver);
     const l = q.locationId && byId(q.locationId);
-    if (l) bits.push(l.name);
+    if (l) bits.push(isMystery(l) ? '??' : l.name);
     if (editing && !q.revealed) bits.push('Hidden from players');
     return bits.join(' · ');
   }
@@ -1762,7 +1793,7 @@
       updateLogBadge();
     } else if (logTab === 'people') {
       let any = false;
-      data.locations.filter((l) => l.kind === 'settlement').forEach((l) => {
+      data.locations.filter((l) => l.kind === 'settlement' && !isMystery(l)).forEach((l) => {
         const people = npcsFor(l);
         if (!people.length) return;
         any = true;
@@ -3701,7 +3732,7 @@
     if (!data.locations.length) { b.appendChild(el('p', 'muted', 'No pins yet.')); return; }
     const ul = el('ul', 'pin-list');
     data.locations.forEach((loc) => ul.appendChild(listButton(safeColor(loc.color || data.defaults.color), loc.name || 'Untitled place',
-      loc.kind === 'settlement' ? ['settle', 'Settlement'] : null, () => selectPin(loc.id, true))));
+      loc.mystery ? ['hidden', '??'] : loc.kind === 'settlement' ? ['settle', 'Settlement'] : null, () => selectPin(loc.id, true))));
     b.appendChild(ul);
   }
   function showPinForm(loc) {
@@ -3709,6 +3740,20 @@
     const b = body();
     const refresh = () => { updateMarker(loc); if (popupKey === 'loc:' + loc.id) openPopup(loc); changed(); };
     b.appendChild(el('div', 'form-head')).appendChild(btn('← All pins', 'ghost small', backToList));
+    // Mystery: players see "??" and nothing else until revealed.
+    const mys = el('div', 'reveal-box' + (loc.mystery ? '' : ' on'));
+    if (loc.mystery) {
+      mys.appendChild(el('div', null, 'Mystery pin: players see “??” here and nothing else.'));
+      mys.appendChild(btn('Reveal to players & publish', 'accent', async () => {
+        loc.mystery = false; refresh(); showPinForm(loc);
+        await publish();
+      }));
+      mys.appendChild(btn('Reveal without publishing', 'small ghost', () => { loc.mystery = false; refresh(); showPinForm(loc); }));
+    } else {
+      mys.appendChild(el('div', null, 'Players can see everything on this pin.'));
+      mys.appendChild(btn('Make it a mystery (??)', 'small ghost', () => { loc.mystery = true; refresh(); showPinForm(loc); }));
+    }
+    b.appendChild(mys);
     const name = textInput(loc.name, (v) => { loc.name = v; refresh(); });
     name.id = 'pf-name'; name.maxLength = 140;
     b.appendChild(field('Name', name));
