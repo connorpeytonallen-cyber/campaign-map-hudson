@@ -16070,16 +16070,16 @@ window.MAP_DATA = {
     {
       "id": "pmw7ztkb3kswx",
       "kind": "place",
-      "name": "New place",
-      "description": "",
-      "lng": -79.901628,
-      "lat": 32.817637,
-      "titleFont": "",
-      "bodyFont": "",
+      "name": "The Lone Fishing Shack",
+      "description": "“A one-room shack on stilts over the mudflat, its roof half caved in. Nets hang from the porch rail, stiff with salt and ash. A rowboat lies upside down beside it, its bottom stove in.”",
+      "lng": -79.90292,
+      "lat": 32.817383,
+      "titleFont": "IM Fell English",
+      "bodyFont": "IM Fell English",
       "textSize": "",
-      "color": "",
+      "color": "#4a90e2",
       "image": "",
-      "symbol": "",
+      "symbol": "anchor",
       "symbolColor": "",
       "scale": 1,
       "throughFog": false,
@@ -16172,8 +16172,8 @@ window.MAP_DATA = {
       "kind": "place",
       "name": "New place",
       "description": "",
-      "lng": -79.847013,
-      "lat": 32.774768,
+      "lng": -79.849793,
+      "lat": 32.771746,
       "titleFont": "",
       "bodyFont": "",
       "textSize": "",
@@ -16232,8 +16232,8 @@ window.MAP_DATA = {
       "kind": "place",
       "name": "New place",
       "description": "",
-      "lng": -79.910117,
-      "lat": 32.776035,
+      "lng": -79.910461,
+      "lat": 32.775448,
       "titleFont": "",
       "bodyFont": "",
       "textSize": "",
@@ -16242,9 +16242,10 @@ window.MAP_DATA = {
       "symbol": "",
       "symbolColor": "",
       "scale": 1,
+      "throughFog": false,
+      "mystery": true,
       "shops": [],
-      "npcs": [],
-      "mystery": true
+      "npcs": []
     },
     {
       "id": "pmw801q5zc18k",
@@ -16261,9 +16262,10 @@ window.MAP_DATA = {
       "symbol": "",
       "symbolColor": "",
       "scale": 1,
+      "throughFog": false,
+      "mystery": true,
       "shops": [],
-      "npcs": [],
-      "mystery": true
+      "npcs": []
     },
     {
       "id": "pmw8027t0rabc",
@@ -16280,9 +16282,10 @@ window.MAP_DATA = {
       "symbol": "",
       "symbolColor": "",
       "scale": 1,
+      "throughFog": false,
+      "mystery": true,
       "shops": [],
-      "npcs": [],
-      "mystery": true
+      "npcs": []
     }
   ],
   "quests": [
