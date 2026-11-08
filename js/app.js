@@ -5347,36 +5347,51 @@
   const WX_KEY = () => 'campaign-map.weather:' + SITE_KEY;
   let weather = { k: 'clear', ts: 0 };
   const wxOf = (k) => WEATHER.find((w) => w[0] === k) || WEATHER[0];
-  const cleanWeather = (w) => (w && WEATHER.some((x) => x[0] === w.k) ? { k: w.k, ts: num(w.ts) || 0, roll: num(w.roll) || null, auto: !!w.auto, seed: Math.round(num(w.seed) || 1), spread: w.spread === 'whole' ? 'whole' : 'moving' } : null);
+  const cleanWeather = (w) => (w && WEATHER.some((x) => x[0] === w.k) ? { k: w.k, ts: num(w.ts) || 0, roll: num(w.roll) || null, auto: !!w.auto, seed: Math.round(num(w.seed) || 1), spread: w.spread === 'whole' ? 'whole' : 'moving', ox: Number.isFinite(w.ox) ? w.ox : null, oy: Number.isFinite(w.oy) ? w.oy : null } : null);
   // --- Moving clouds: rain, drizzle and storms come as drifting cloud cells instead of covering the whole map.
   // Every screen works out the same clouds from the seed and the time the weather started, so they stay in sync.
   const PATCHY = { drizzle: { n: 7, r: [0.05, 0.085] }, rain: { n: 6, r: [0.06, 0.1] }, storm: { n: 4, r: [0.07, 0.11] } };
   const isPatchy = (w) => !!(w && PATCHY[w.k] && w.spread !== 'whole');
   const LAT_K = Math.cos(32.8 * Math.PI / 180);
   const WX_BOX = (() => { const [[w, s], [e, n]] = LOCK_BOUNDS, mx = (e - w) * 0.3, my = (n - s) * 0.3; return { w: w - mx, s: s - my, W: e - w + 2 * mx, H: n - s + 2 * my, mapW: e - w }; })();
-  const CLOUD_CROSS_MIN = 35; // real minutes for a cloud to drift across the map and back round
+  const CLOUD_CROSS_MIN = 90; // real minutes for a cloud to drift across the map and back round
   function seeded(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
   const wrapTo = (v, lo, size) => ((((v - lo) % size) + size) % size) + lo;
-  // The cloud blobs right now: [{lng, lat, r}] with r in degrees of longitude.
+  // The cloud puffs right now: [{lng, lat, r, c}] with r in degrees of longitude and c the cloud it belongs to.
+  // A cluster of 3–5 clouds starts over the party (ox, oy); more roam the rest of the map. They all ride the same wind.
   function cloudBlobs(w, now) {
     const P = w && PATCHY[w.k];
     if (!P) return [];
     const R = seeded(w.seed || 1), ang = R() * Math.PI * 2, sp = WX_BOX.W / (CLOUD_CROSS_MIN * 60000);
+    const ca = Math.cos(ang), sa = Math.sin(ang), mapW = WX_BOX.mapW;
     const el = Math.max(0, now - (w.ts || now)), out = [];
-    for (let i = 0; i < P.n; i++) {
-      const bx = WX_BOX.w + R() * WX_BOX.W, by = WX_BOX.s + R() * WX_BOX.H, v = 0.8 + R() * 0.4;
-      const r = (P.r[0] + R() * (P.r[1] - P.r[0])) * WX_BOX.mapW;
-      const cx = wrapTo(bx + Math.cos(ang) * sp * v * el, WX_BOX.w, WX_BOX.W), cy = wrapTo(by + Math.sin(ang) * sp * v * el * LAT_K, WX_BOX.s, WX_BOX.H);
-      const parts = 3 + Math.floor(R() * 3);
+    const hasO = Number.isFinite(w.ox) && Number.isFinite(w.oy), homeN = 3 + Math.floor(R() * 3);
+    const total = (hasO ? homeN : 0) + P.n;
+    for (let i = 0; i < total; i++) {
+      const home = hasO && i < homeN;
+      let bx, by, r, v;
+      if (home) {
+        const a = R() * Math.PI * 2, d = i === 0 ? 0 : (0.03 + R() * 0.05) * mapW;
+        bx = w.ox + Math.cos(a) * d; by = w.oy + Math.sin(a) * d * LAT_K; r = (0.04 + R() * 0.025) * mapW; v = 0.6; // the party's clouds linger
+      } else {
+        bx = WX_BOX.w + R() * WX_BOX.W; by = WX_BOX.s + R() * WX_BOX.H; r = (P.r[0] + R() * (P.r[1] - P.r[0])) * mapW; v = 0.85 + R() * 0.3;
+      }
+      const cx = wrapTo(bx + ca * sp * v * el, WX_BOX.w, WX_BOX.W), cy = wrapTo(by + sa * sp * v * el * LAT_K, WX_BOX.s, WX_BOX.H);
+      // Each cloud is a bundle of round puffs, stretched along the wind, that slowly shift shape.
+      const parts = 8 + Math.floor(R() * 5);
       for (let j = 0; j < parts; j++) {
-        const a = R() * Math.PI * 2, d = R() * r * 0.6;
-        out.push({ lng: cx + Math.cos(a) * d, lat: cy + Math.sin(a) * d * LAT_K, r: r * (0.5 + R() * 0.35) });
+        const along = j ? (R() * 2 - 1) * r * 0.95 : 0, across = j ? (R() * 2 - 1) * r * 0.45 : 0;
+        const ph = R() * Math.PI * 2, sz = R();
+        const wob = r * 0.07 * Math.sin(now * 0.00012 + ph), wob2 = r * 0.05 * Math.cos(now * 0.0001 + ph * 1.7);
+        const ox = along * ca - across * sa + wob, oy = along * sa + across * ca + wob2;
+        const pr = j ? r * (0.32 + sz * 0.28) * (1 - 0.3 * Math.abs(along) / r) : r * 0.6;
+        out.push({ lng: cx + ox, lat: cy + oy * LAT_K, r: pr * (1 + 0.04 * Math.sin(now * 0.00015 + ph)), c: i });
       }
     }
     return out;
   }
   function underCloud(lng, lat, w, now) {
-    return cloudBlobs(w || weather, now || Date.now()).some((b) => { const dx = lng - b.lng, dy = (lat - b.lat) / LAT_K; return dx * dx + dy * dy < (b.r * 0.85) * (b.r * 0.85); });
+    return cloudBlobs(w || weather, now || Date.now()).some((b) => { const dx = lng - b.lng, dy = (lat - b.lat) / LAT_K; return dx * dx + dy * dy < b.r * b.r; });
   }
   // The weather at one spot: with moving clouds, outside them it's just overcast.
   function weatherAt(ll) {
@@ -5424,7 +5439,10 @@
     lastPartyWx = k;
     if (!editing || !data.weatherSounds.auto) return;
     const s = weatherSound(k);
-    if (wxSoundId && (!s || s.id !== wxSoundId) && activeLoopIds.has(wxSoundId)) { const old = soundById(wxSoundId); if (old) dmStop(old); }
+    // Stop every other weather sound still running (even ones started before the page was reloaded).
+    const wxIds = new Set(WEATHER.map((w) => weatherSound(w[0])).filter(Boolean).map((x) => x.id));
+    if (wxSoundId) wxIds.add(wxSoundId);
+    wxIds.forEach((id) => { if ((!s || id !== s.id) && activeLoopIds.has(id)) { const old = soundById(id); if (old) dmStop(old); } });
     wxSoundId = s ? s.id : '';
     if (!s || activeLoopIds.has(s.id)) return;
     const keep = soundTarget;
@@ -5435,6 +5453,10 @@
   function setWeather(k, roll, quiet, keep) {
     const prev = weather || {};
     weather = { k, ts: keep ? prev.ts || Date.now() : Date.now(), roll: roll || null, auto: !!prev.auto, seed: keep && prev.seed ? prev.seed : 1 + Math.floor(Math.random() * 1e9), spread: prev.spread === 'whole' ? 'whole' : 'moving' };
+    // New clouds start over the party (or the middle of the map if there's no token).
+    if (keep && Number.isFinite(prev.ox)) { weather.ox = prev.ox; weather.oy = prev.oy; }
+    else if (partyPos) { weather.ox = partyPos.lng; weather.oy = partyPos.lat; }
+    else { const c = map ? map.getCenter() : { lng: (LOCK_BOUNDS[0][0] + LOCK_BOUNDS[1][0]) / 2, lat: (LOCK_BOUNDS[0][1] + LOCK_BOUNDS[1][1]) / 2 }; weather.ox = round6(c.lng); weather.oy = round6(c.lat); }
     lsSet(WX_KEY(), weather);
     if (relay && relay.connected) relay.publish(`${ROOM}/weather`, JSON.stringify(weather), { retain: true });
     else toast('Can’t reach the live service right now, so players see the new weather once it reconnects.', 'warn', 6000);
@@ -5494,13 +5516,13 @@
       const mc = el('div', 'wx-clouds');
       mc.appendChild(el('div', 'sub-h', 'Where it falls'));
       const seg = el('div', 'monster-tabs');
-      [['moving', 'Moving clouds'], ['whole', 'Whole map']].forEach(([k, label]) => seg.appendChild(btn(label, 'small' + ((weather.spread || 'moving') === k ? ' on' : ''), () => { weather.spread = k; setWeather(weather.k, weather.roll, false, true); })));
+      [['moving', 'Moving clouds'], ['whole', 'Whole map']].forEach(([k, label]) => seg.appendChild(btn(label, 'small' + ((weather.spread || 'moving') === k ? ' on' : ''), () => { weather.spread = k; setWeather(weather.k, weather.roll); })));
       mc.appendChild(seg);
       if (isPatchy(weather)) {
         const pk = partyWeather();
-        mc.appendChild(el('p', 'tip', `Clouds drift across the map on their own, about once every ${CLOUD_CROSS_MIN} minutes of real time. It only rains under them. The weather sound and the travel rules follow the party token.`));
+        mc.appendChild(el('p', 'tip', 'A few clouds start over the party and more roam the map. They drift on their own, slowly, and it only rains under them. The weather sound and the travel rules follow the party token: under a cloud they hear the storm, out of it the wind.'));
         mc.appendChild(el('div', 'wx-party' + (pk === 'overcast' ? '' : ' wet'), partyPos ? (pk === 'overcast' ? 'The party is out of the clouds right now (overcast).' : `The party is under the clouds: ${wxOf(pk)[2].toLowerCase()}.`) : 'Place the party token to have sound and travel follow the clouds.'));
-        mc.appendChild(btn('New clouds', 'small', () => setWeather(weather.k, weather.roll)));
+        mc.appendChild(btn('New clouds over the party', 'small', () => setWeather(weather.k, weather.roll)));
       }
       b.appendChild(mc);
     }
@@ -5573,9 +5595,27 @@
     const W = () => wx.canvas.width, H = () => wx.canvas.height;
     wx.drops = Array.from({ length: patchy ? L.drops * 2 : L.drops }, () => ({ x: Math.random() * W(), y: Math.random() * H(), v: 0.7 + Math.random() * 0.6 }));
     let last = performance.now(), bolt = null;
-    // Grey enough to read as cloud over the dark map.
-    const cloudShade = k === 'storm' ? '62,66,84' : k === 'rain' ? '78,84,100' : '96,102,116';
-    const cloudA = (k === 'storm' ? 0.5 : k === 'rain' ? 0.42 : 0.32) * (editing ? 0.7 : 1);
+    // Grey enough to read as cloud over the dark map, with a darker belly.
+    const CLOUD_COL = { storm: ['#5a6072', '#14161e'], rain: ['#687083', '#262a36'], drizzle: ['#7d8496', '#3e4452'] }[k] || ['#687083', '#262a36'];
+    const cloudA = (k === 'storm' ? 0.62 : k === 'rain' ? 0.52 : 0.4) * (editing ? 0.7 : 1);
+    // Clouds are drawn small and blurred, then scaled up: soft round edges, no hard blobs.
+    const SC = 4;
+    const offA = el('canvas'), offB = el('canvas'), cA = offA.getContext('2d'), cB = offB.getContext('2d');
+    const canBlur = 'filter' in cA;
+    function paintMask(c, cv, pts, grow, col) {
+      if (cv.width !== Math.ceil(W() / SC)) { cv.width = Math.ceil(W() / SC); cv.height = Math.ceil(H() / SC); }
+      c.globalCompositeOperation = 'source-over';
+      c.clearRect(0, 0, cv.width, cv.height);
+      if (canBlur) c.filter = `blur(${Math.max(2, Math.round(pts.blur / SC))}px)`;
+      c.fillStyle = '#fff';
+      c.beginPath();
+      for (const p of pts) { c.moveTo(p.x / SC + p.r * grow / SC, p.y / SC); c.arc(p.x / SC, p.y / SC, p.r * grow / SC, 0, Math.PI * 2); }
+      c.fill();
+      if (canBlur) c.filter = 'none';
+      c.globalCompositeOperation = 'source-in';
+      c.fillStyle = col; c.fillRect(0, 0, cv.width, cv.height);
+      c.globalCompositeOperation = 'source-over';
+    }
     const tick = (now) => {
       wx.raf = requestAnimationFrame(tick);
       if (document.hidden) return;
@@ -5585,17 +5625,22 @@
       // Clouds: soft dark blobs where it's raining, in screen pixels.
       let blobs = null;
       if (patchy) {
+        const c0 = map.getCenter(), p0 = map.project([c0.lng, c0.lat]), p1 = map.project([c0.lng + 0.01, c0.lat]);
+        const pxPerDeg = Math.abs(p1.x - p0.x) / 0.01 * dpr;
         blobs = cloudBlobs(weather, Date.now()).map((c) => {
-          const p = map.project([c.lng, c.lat]), q = map.project([c.lng + c.r, c.lat]);
-          return { x: p.x * dpr, y: p.y * dpr, r: Math.abs(q.x - p.x) * dpr };
-        }).filter((c) => c.x + c.r > 0 && c.y + c.r > 0 && c.x - c.r < W() && c.y - c.r < H());
-        for (const c of blobs) {
-          const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, c.r);
-          g.addColorStop(0, `rgba(${cloudShade},${cloudA})`);
-          g.addColorStop(0.6, `rgba(${cloudShade},${cloudA * 0.6})`);
-          g.addColorStop(1, `rgba(${cloudShade},0)`);
-          ctx.fillStyle = g;
-          ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2); ctx.fill();
+          const p = map.project([c.lng, c.lat]);
+          return { x: p.x * dpr, y: p.y * dpr, r: c.r * pxPerDeg };
+        }).filter((c) => c.x + c.r * 1.3 > 0 && c.y + c.r * 1.3 > 0 && c.x - c.r * 1.3 < W() && c.y - c.r * 1.3 < H());
+        if (blobs.length) {
+          const avgR = blobs.reduce((s, b) => s + b.r, 0) / blobs.length;
+          blobs.blur = avgR * 0.45;
+          paintMask(cA, offA, blobs, 1.05, CLOUD_COL[0]);
+          blobs.blur = avgR * 0.6;
+          paintMask(cB, offB, blobs, 0.55, CLOUD_COL[1]);
+          ctx.imageSmoothingEnabled = true;
+          ctx.globalAlpha = cloudA; ctx.drawImage(offA, 0, 0, offA.width * SC, offA.height * SC);
+          ctx.globalAlpha = cloudA * 0.85; ctx.drawImage(offB, 0, 0, offB.width * SC, offB.height * SC);
+          ctx.globalAlpha = 1;
         }
         // Lightning lights up one cloud at a time.
         if (bolt && now < bolt.until) {
@@ -5608,7 +5653,7 @@
       ctx.lineWidth = 1.1 * dpr;
       ctx.beginPath();
       const dx = -0.18;
-      const inCloud = (x, y) => { for (const c of blobs) { const ex = x - c.x, ey = y - c.y, rr = c.r * 0.8; if (ex * ex + ey * ey < rr * rr) return true; } return false; };
+      const inCloud = (x, y) => { for (const c of blobs) { const ex = x - c.x, ey = y - c.y, rr = c.r * 0.95; if (ex * ex + ey * ey < rr * rr) return true; } return false; };
       for (const d of wx.drops) {
         const sp = L.speed * d.v * dpr * dt;
         d.y += sp; d.x += sp * dx;
