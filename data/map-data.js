@@ -16070,7 +16070,7 @@ window.MAP_DATA = {
       "symbolColor": "",
       "scale": 1,
       "throughFog": false,
-      "mystery": true,
+      "mystery": false,
       "loot": "-2x Rations\n-4x Rifle rounds\n-1x Jerrycan of fuel (1 trip)\n-2x Motor oil\n-1x Toolbox (advantage on repairs)",
       "shops": [],
       "npcs": []
