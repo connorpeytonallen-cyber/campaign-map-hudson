@@ -16538,7 +16538,7 @@ window.MAP_DATA = {
           "role": "Army Surgeon",
           "description": "“Brisk and spotless, sleeves rolled to the elbow. She fixes what she can and writes down everything she can’t.”",
           "image": "",
-          "hidden": true
+          "hidden": false
         },
         {
           "id": "pmwf4uxrjzdgu",
@@ -16674,8 +16674,8 @@ window.MAP_DATA = {
       "status": "active",
       "giver": "Sergeant Mack Dunleavy",
       "locationId": "pmw815gu8fp8t",
-      "lng": -79.785599,
-      "lat": 32.792386,
+      "lng": -79.785902,
+      "lat": 32.791298,
       "revealed": false,
       "scale": 1
     },
@@ -16686,8 +16686,8 @@ window.MAP_DATA = {
       "status": "active",
       "giver": "Private Tom Abel",
       "locationId": "pmw815gu8fp8t",
-      "lng": -79.781773,
-      "lat": 32.789955,
+      "lng": -79.785988,
+      "lat": 32.789151,
       "revealed": false,
       "scale": 1
     },
@@ -16698,8 +16698,8 @@ window.MAP_DATA = {
       "status": "active",
       "giver": "Colonel Aldous Wray",
       "locationId": "pmw815gu8fp8t",
-      "lng": -79.789635,
-      "lat": 32.788478,
+      "lng": -79.789659,
+      "lat": 32.788477,
       "revealed": false,
       "scale": 1
     },
