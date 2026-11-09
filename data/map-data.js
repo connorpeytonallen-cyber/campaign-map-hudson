@@ -16791,7 +16791,7 @@ window.MAP_DATA = {
       "id": "pmwvpi7nqawcq",
       "title": "Hold the Picket",
       "description": "“Sweetgrass and Haint Blue men are coming tonight to take the causeway. Gus can’t hold it alone. Stay until dawn.”\nReward: $20 and a harpoon (1d8).",
-      "status": "active",
+      "status": "done",
       "giver": "Gus Tibbs",
       "locationId": "pmw8159177p7y",
       "lng": -79.837509,
