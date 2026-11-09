@@ -16301,7 +16301,7 @@ window.MAP_DATA = {
       "symbolColor": "",
       "scale": 1,
       "throughFog": false,
-      "mystery": true,
+      "mystery": false,
       "loot": "-$9\n-1x Pocket watch ($8 at Dot's)\n-1x Pair of good boots\n-3x Pistol rounds\n-1x Ration (in a coat pocket)",
       "shops": [],
       "npcs": []
