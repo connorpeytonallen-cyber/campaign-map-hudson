@@ -15115,8 +15115,8 @@ window.MAP_DATA = {
         ]
       ],
       "labelAt": [
-        -79.828474,
-        32.762818
+        -79.828197,
+        32.763138
       ],
       "labelScale": 1,
       "labelAngle": -30,
@@ -16459,7 +16459,7 @@ window.MAP_DATA = {
           "role": "Watchman",
           "description": "“Old and half-deaf, a shotgun across his knees. He’ll ring the bell at anything.”",
           "image": "",
-          "hidden": true
+          "hidden": false
         }
       ]
     },
@@ -16794,9 +16794,9 @@ window.MAP_DATA = {
       "status": "active",
       "giver": "Gus Tibbs",
       "locationId": "pmw8159177p7y",
-      "lng": -79.837316,
-      "lat": 32.765522,
-      "revealed": false,
+      "lng": -79.837509,
+      "lat": 32.765327,
+      "revealed": true,
       "scale": 1
     }
   ],
