@@ -16514,7 +16514,7 @@ window.MAP_DATA = {
           "role": "Commander",
           "description": "“Upright and gray at the temples, uniform pressed every morning. Speaks in orders even when he’s being kind.”",
           "image": "",
-          "hidden": true
+          "hidden": false
         },
         {
           "id": "pmwcu2a7ed4j7",
