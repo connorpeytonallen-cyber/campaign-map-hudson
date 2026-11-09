@@ -16700,7 +16700,7 @@ window.MAP_DATA = {
       "locationId": "pmw815gu8fp8t",
       "lng": -79.789659,
       "lat": 32.788477,
-      "revealed": false,
+      "revealed": true,
       "scale": 1
     },
     {
