@@ -16530,7 +16530,7 @@ window.MAP_DATA = {
           "role": "Gate Sergeant",
           "description": "“Broad, sunburned and bored, with a rubber stamp on a string. Your papers are either in order or they aren’t.”",
           "image": "",
-          "hidden": true
+          "hidden": false
         },
         {
           "id": "pmwj1manh32oe",
