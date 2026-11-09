@@ -16522,7 +16522,7 @@ window.MAP_DATA = {
           "role": "Quartermaster",
           "description": "“Thick glasses and a clipboard she never puts down. Everything has a form, and every form has a price.”",
           "image": "",
-          "hidden": true
+          "hidden": false
         },
         {
           "id": "pmwafb5k8ols5",
@@ -26149,7 +26149,7 @@ window.MAP_DATA = {
       "audio": "sounds/pmw6zbprt3r3n-mw6zvpnq4.mp3",
       "loop": false,
       "cat": "ambience",
-      "volume": 0.8
+      "volume": 0.4
     },
     {
       "id": "pmw6zcsuu2d1p",
