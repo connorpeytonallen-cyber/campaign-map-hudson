@@ -682,3 +682,16 @@ canvas.wx-rain, canvas.wx-cloudlayer { width: 100%; height: 100%; }
 .wx-flash, .wx-boltglow { will-change: opacity; opacity: 0; }
 .wx-boltglow { inset: auto; border-radius: 50%; background: radial-gradient(closest-side, rgba(220, 225, 255, .9), rgba(220, 225, 255, 0)); }
 @media (prefers-reduced-motion: reduce) { .wx-sheet { animation-duration: 3s !important; } }
+/* Mixed dice: each die keeps its own count; the small − removes one. */
+.die-wrap { position: relative; flex: 1 0 auto; display: flex; min-width: 40px; }
+.die-wrap .die { flex: 1; }
+.die-minus { position: absolute; top: -6px; right: -5px; width: 17px; height: 17px; padding: 0; border-radius: 50%; border: 1px solid #55555e; background: #2a2a30; color: var(--text); font: 700 12px/14px var(--ui); cursor: pointer; display: none; }
+.die-wrap.has .die-minus { display: block; }
+.die-minus:hover { border-color: var(--accent); color: var(--accent); }
+.roll-die[data-d]::after { content: attr(data-d); margin-left: 3px; font-size: 9px; opacity: .55; font-weight: 500; }
+.dice-roll:disabled { opacity: .6; cursor: default; }
+/* Health and wallet cards (Logbook and the DM's Characters tab) */
+.vit-btns input[type=number] { width: 76px; }
+.wallet-amt { margin-left: auto; font: 700 18px var(--ui); color: #e8d9a8; letter-spacing: .02em; }
+.vit-card.compact .wallet-amt { font-size: 14px; }
+.hp-card .vit-bar { height: 12px; }

@@ -1889,7 +1889,7 @@
     const quests = visibleQuests(data);
     const unseen = new Set(unseenQuests().map((q) => q.id));
     const beasts = data.bestiary.filter((x) => x.revealed);
-    const tabs = [['character', 'Character'], ['vitals', 'Sanity & Hunger'], ['notes', 'My notes'], ['quests', `Quests${unseen.size ? ' (' + unseen.size + ' new)' : ''}`], ['people', 'People'], ['bestiary', 'Bestiary']];
+    const tabs = [['character', 'Character'], ['vitals', 'Health & Status'], ['notes', 'My notes'], ['quests', `Quests${unseen.size ? ' (' + unseen.size + ' new)' : ''}`], ['people', 'People'], ['bestiary', 'Bestiary']];
     lb.appendChild(tabBar(tabs, logTab, (id) => { logTab = id; renderLog(); }));
     const scroll = el('div', 'sheet-scroll');
     const body = el('div', 'tab-body');
@@ -2263,7 +2263,10 @@
   // ===== Dice roller (bottom left): a shared, read-only feed of rolls =====
   const DICE = [4, 6, 8, 10, 12, 20];
   const DICE_LOG_MAX = 60, DICE_OPEN_KEY = 'campaign-map.diceOpen', HIDDEN_KEY = 'campaign-map.hiddenRolls:' + SITE_KEY;
-  let diceLog = [], diceSides = 20, diceCount = 1, diceMod = 0, diceFor = '', diceHidden = false, diceUnread = 0, diceClearedAt = 0, diceNextLabel = '', diceAdv = '';
+  let diceLog = [], diceMod = 0, diceFor = '', diceHidden = false, diceUnread = 0, diceClearedAt = 0, diceNextLabel = '', diceAdv = '';
+  // The dice in the next roll, in the order they were picked: [[sides, count], ...], e.g. [[6, 2], [8, 1]] = 2d6 + 1d8.
+  let dicePool = [[20, 1]];
+  const poolLabel = (pool, mod) => (pool.length ? pool.map(([s, c]) => `${c}d${s}`).join(' + ') : 'no dice') + (mod ? (mod > 0 ? ' + ' : ' − ') + Math.abs(mod) : '');
   // Advantage / disadvantage: roll each die twice, keep the higher / lower.
   function rollSet(count, sides, adv) {
     const results = [], dropped = [];
@@ -2284,20 +2287,29 @@
     return (x % n) + 1;
   }
   const diceLabel = (count, sides, mod) => `${count}d${sides}${mod ? (mod > 0 ? '+' : '') + mod : ''}`;
+  // One kind of die in a roll: { sides, results, dropped }.
+  function cleanGroup(g) {
+    const sides = g && DICE.includes(+g.sides) ? +g.sides : 0;
+    if (!sides) return null;
+    const ok = (v) => Number.isInteger(v) && v >= 1 && v <= sides;
+    const results = arr(g.results).map(Number).filter(ok).slice(0, 20);
+    if (!results.length) return null;
+    return { sides, results, dropped: arr(g.dropped).map(Number).filter(ok).slice(0, 20) };
+  }
   function cleanRoll(x) {
     if (!x || typeof x.id !== 'string') return null;
-    const sides = DICE.includes(+x.sides) ? +x.sides : 0;
-    if (!sides) return null;
-    const results = arr(x.results).map(Number).filter((v) => Number.isInteger(v) && v >= 1 && v <= sides).slice(0, 20);
-    if (!results.length) return null;
+    // Newer rolls can mix dice (groups); older ones are a single kind of die.
+    let groups = Array.isArray(x.groups) ? x.groups.map(cleanGroup).filter(Boolean).slice(0, DICE.length) : [];
+    if (!groups.length) { const g = cleanGroup(x); if (!g) return null; groups = [g]; }
+    const results = groups.flatMap((g) => g.results);
     const mod = Math.max(-99, Math.min(99, Math.round(num(x.mod) || 0)));
     return {
       id: x.id.slice(0, 40), byId: str(x.byId).slice(0, 40), by: cleanName(x.by) || 'Someone', color: safeColor(x.color, PIN_COLORS[0]),
-      dm: !!x.dm, forName: cleanName(x.forName), forColor: safeColor(x.forColor, ''), sides, count: results.length, mod, results,
+      dm: !!x.dm, forName: cleanName(x.forName), forColor: safeColor(x.forColor, ''), sides: groups[0].sides, count: results.length, mod, results, groups,
       total: results.reduce((s, v) => s + v, 0) + mod, ts: num(x.ts) || 0, revealed: !!x.revealed,
       label: str(x.label).replace(/\s+/g, ' ').trim().slice(0, 40),
       adv: x.adv === 'adv' || x.adv === 'dis' ? x.adv : '',
-      dropped: arr(x.dropped).map(Number).filter((v) => Number.isInteger(v) && v >= 1 && v <= sides).slice(0, 20)
+      dropped: groups.flatMap((g) => g.dropped)
     };
   }
   // Rolls clear themselves after 5 minutes, on everyone's screen.
@@ -2316,17 +2328,20 @@
     if (changed) renderDice(false);
   }
   setInterval(pruneOldRolls, 15000);
+  // New rolls go to the bottom in the order they reach this screen. (Sorting by each device's own clock put rolls
+  // out of order when someone's clock was a little off.)
   function mergeRolls(list) {
-    const byKey = new Map(diceLog.map((x) => [x.id, x]));
-    let added = 0;
+    const have = new Set(diceLog.map((x) => x.id));
+    const fresh = [];
     for (const raw of list) {
       const x = cleanRoll(raw);
-      if (!x || byKey.has(x.id) || x.ts <= diceClearedAt || !rollFresh(x)) continue;
-      byKey.set(x.id, x);
-      added++;
+      if (!x || have.has(x.id) || x.ts <= diceClearedAt || !rollFresh(x)) continue;
+      have.add(x.id);
+      fresh.push(x);
     }
-    diceLog = [...byKey.values()].filter(rollFresh).sort((a, b) => a.ts - b.ts).slice(-DICE_LOG_MAX);
-    return added;
+    fresh.sort((a, b) => a.ts - b.ts); // rolls arriving together keep the order they were made in
+    diceLog = diceLog.concat(fresh).filter(rollFresh).slice(-DICE_LOG_MAX);
+    return fresh.length;
   }
   function publishRolls() {
     if (relay && relay.connected) relay.publish(`${ROOM}/dice/log`, JSON.stringify({ clearedAt: diceClearedAt, rolls: diceLog }), { retain: true });
@@ -2345,6 +2360,9 @@
       if (wiped) diceUnread = 0;
     }
     const added = mergeRolls(list);
+    // Two people rolling at the same moment can each overwrite the shared feed; if mine went missing, send it again.
+    const sent = new Set(list.map((x) => x && x.id));
+    if (diceLog.some((x) => x.byId === me.id && !sent.has(x.id))) setTimeout(publishRolls, 300 + Math.random() * 700);
     if (wiped && !added) { renderDice(true); return; }
     if (!added) return;
     if (!lsGet(DICE_OPEN_KEY, false)) diceUnread += added;
@@ -2352,14 +2370,17 @@
   }
   function doRoll() {
     if (isKicked()) { toast('You were removed from the session, so you can’t roll.', 'warn'); return; }
-    const { results, dropped } = rollSet(diceCount, diceSides, diceAdv);
+    if (!dicePool.length) { toast('Pick at least one die first.', 'warn'); return; }
     const adv = diceAdv;
     diceAdv = '';
+    const groups = dicePool.map(([sides, count]) => Object.assign({ sides }, rollSet(count, sides, adv)));
+    const results = groups.flatMap((g) => g.results);
     const target = editing && diceFor ? party.get(diceFor) : null;
     const e = {
       id: uid(), byId: me.id, by: me.name || 'Someone', color: me.color, dm: editing,
-      forName: target ? target.name : '', forColor: target ? target.color : '', sides: diceSides, count: diceCount, mod: diceMod,
-      results, total: results.reduce((s, v) => s + v, 0) + diceMod, ts: Date.now(), revealed: false, label: diceNextLabel, adv, dropped
+      forName: target ? target.name : '', forColor: target ? target.color : '', sides: groups[0].sides, count: results.length, mod: diceMod,
+      results, groups, total: results.reduce((s, v) => s + v, 0) + diceMod, ts: Date.now(), revealed: false, label: diceNextLabel, adv,
+      dropped: groups.flatMap((g) => g.dropped)
     };
     if (editing && diceHidden) {
       // Hidden rolls never leave your device until you reveal them.
@@ -2399,20 +2420,25 @@
       who.appendChild(el('b', null, e.by));
       who.appendChild(document.createTextNode(' rolled'));
     }
-    who.appendChild(document.createTextNode(' ' + diceLabel(e.count, e.sides, e.mod)));
+    who.appendChild(document.createTextNode(' ' + poolLabel(e.groups.map((g) => [g.sides, g.results.length]), e.mod)));
     if (e.label) who.appendChild(el('span', 'roll-label', ' · ' + e.label));
     if (e.adv) who.appendChild(el('span', 'roll-tag ' + e.adv, e.adv === 'adv' ? 'advantage' : 'disadvantage'));
     if (e.revealed) who.appendChild(el('span', 'roll-tag', 'revealed'));
     if (hidden) who.appendChild(el('span', 'roll-tag dm', 'hidden'));
     body.appendChild(who);
     const res = el('div', 'roll-res');
-    e.results.forEach((v) => {
-      const d = el('span', 'roll-die', String(v));
-      if (e.sides === 20 && v === 20) d.classList.add('crit');
-      if (e.sides === 20 && v === 1) d.classList.add('fumble');
-      res.appendChild(d);
+    const mixed = e.groups.length > 1;
+    e.groups.forEach((g) => {
+      g.results.forEach((v) => {
+        const d = el('span', 'roll-die', String(v));
+        if (mixed) d.title = 'd' + g.sides;
+        if (mixed) d.dataset.d = 'd' + g.sides;
+        if (g.sides === 20 && v === 20) d.classList.add('crit');
+        if (g.sides === 20 && v === 1) d.classList.add('fumble');
+        res.appendChild(d);
+      });
+      g.dropped.forEach((v) => res.appendChild(el('span', 'roll-die dropped', String(v))));
     });
-    (e.dropped || []).forEach((v) => res.appendChild(el('span', 'roll-die dropped', String(v))));
     if (e.mod) res.appendChild(el('span', 'roll-mod', (e.mod > 0 ? '+ ' : '− ') + Math.abs(e.mod)));
     res.appendChild(el('span', 'roll-total', '= ' + e.total));
     body.appendChild(res);
@@ -2469,20 +2495,34 @@
     box.appendChild(el('div', 'dice-log'));
     const c = el('div', 'dice-controls');
     const dice = el('div', 'dice-row dice-pick');
+    // Tap a die to add one to the roll; the little − takes one away. Mix as many kinds as you like.
     DICE.forEach((n) => {
+      const wrap = el('div', 'die-wrap');
       const b = el('button', 'die', 'd' + n);
       b.type = 'button';
       b.dataset.sides = n;
-      b.onclick = () => { diceSides = n; diceNextLabel = ''; fillDiceControls(); };
-      dice.appendChild(b);
+      b.title = 'Add a d' + n;
+      b.onclick = () => {
+        const g = dicePool.find(([s]) => s === n);
+        if (g) g[1] = Math.min(20, g[1] + 1); else dicePool.push([n, 1]);
+        diceNextLabel = ''; fillDiceControls();
+      };
+      const minus = el('button', 'die-minus', '−');
+      minus.type = 'button';
+      minus.title = 'Remove a d' + n;
+      minus.onclick = () => {
+        const g = dicePool.find(([s]) => s === n);
+        if (!g) return;
+        g[1]--;
+        if (g[1] <= 0) dicePool = dicePool.filter((x) => x !== g);
+        diceNextLabel = ''; fillDiceControls();
+      };
+      wrap.appendChild(b); wrap.appendChild(minus);
+      dice.appendChild(wrap);
     });
     c.appendChild(dice);
     const row = el('div', 'dice-row');
-    const cnt = el('div', 'dice-count');
-    cnt.appendChild(btn('−', 'small', () => { diceCount = Math.max(1, diceCount - 1); diceNextLabel = ''; fillDiceControls(); }));
-    cnt.appendChild(el('span', 'dice-n'));
-    cnt.appendChild(btn('+', 'small', () => { diceCount = Math.min(20, diceCount + 1); diceNextLabel = ''; fillDiceControls(); }));
-    row.appendChild(cnt);
+    row.appendChild(btn('Clear', 'small ghost dice-clearpool', () => { dicePool = []; diceMod = 0; diceNextLabel = ''; fillDiceControls(); }));
     const modL = el('label', 'dice-mod', 'Mod');
     const mod = el('input');
     mod.type = 'number'; mod.min = '-99'; mod.max = '99'; mod.step = '1'; mod.value = String(diceMod);
@@ -2531,10 +2571,16 @@
   function fillDiceControls() {
     const box = $('#dice');
     if (!box || !box.querySelector('.dice-controls')) return;
-    box.querySelectorAll('.die:not(.adv-opt)').forEach((b) => b.classList.toggle('on', +b.dataset.sides === diceSides));
+    box.querySelectorAll('.die:not(.adv-opt)').forEach((b) => {
+      const g = dicePool.find(([s]) => s === +b.dataset.sides), n = g ? g[1] : 0;
+      b.classList.toggle('on', n > 0);
+      b.textContent = (n > 1 ? n : '') + 'd' + b.dataset.sides;
+      b.parentNode.classList.toggle('has', n > 0);
+    });
     box.querySelectorAll('.adv-opt').forEach((b) => b.classList.toggle('on', b.dataset.adv === diceAdv));
-    box.querySelector('.dice-n').textContent = String(diceCount);
-    box.querySelector('.dice-roll').textContent = (editing && diceHidden ? 'Roll hidden ' : 'Roll ') + diceLabel(diceCount, diceSides, diceMod) + (diceAdv === 'adv' ? ' (adv)' : diceAdv === 'dis' ? ' (dis)' : '') + (diceNextLabel ? ' · ' + diceNextLabel : '');
+    const rb = box.querySelector('.dice-roll');
+    rb.disabled = !dicePool.length;
+    rb.textContent = dicePool.length ? (editing && diceHidden ? 'Roll hidden ' : 'Roll ') + poolLabel(dicePool, diceMod) + (diceAdv === 'adv' ? ' (adv)' : diceAdv === 'dis' ? ' (dis)' : '') + (diceNextLabel ? ' · ' + diceNextLabel : '') : 'Tap dice to add them';
     const modIn = box.querySelector('.dice-mod input');
     if (modIn && document.activeElement !== modIn) modIn.value = String(diceMod);
     box.querySelectorAll('.dice-dm').forEach((row) => { row.hidden = !editing; });
@@ -2554,6 +2600,8 @@
 
   // ===== Soundboard: the DM plays sounds on everyone's map =====
   const SOUND_PREFS_KEY = 'campaign-map.sound', MAX_AUDIO_MB = 8, LOOP_STATE_MAX_AGE = 6 * 3600 * 1000;
+  // Players don't get sound (and have no sound box); the soundboard plays on the DM's device only. Set to true to bring it back.
+  const PLAYER_SOUND = false;
   let soundOn = false, remoteLoops = [];
   let soundPrefs = Object.assign({ volume: 0.8, muted: false }, lsGet(SOUND_PREFS_KEY, {}));
   const loops = new Map();          // sound id -> looping Audio
@@ -2615,6 +2663,7 @@
   }
   function onSoundMessage(topic, txt) {
     if (isKicked() || !txt) return;
+    if (!editing && !PLAYER_SOUND) return; // players don't hear the soundboard
     let m;
     try { m = JSON.parse(txt); } catch (e) { return; }
     if (topic.endsWith('/sound/state')) {
@@ -2634,7 +2683,7 @@
   }
   // DM controls
   function dmPlay(s) {
-    if (!published.sounds.some((p) => p.id === s.id && p.audio === s.audio)) toast('Only you can hear this one until you Publish, because players don’t have it yet.', 'warn', 6000);
+    if (PLAYER_SOUND && !published.sounds.some((p) => p.id === s.id && p.audio === s.audio)) toast('Only you can hear this one until you Publish, because players don’t have it yet.', 'warn', 6000);
     playLocal(s.id);
     const to = soundTarget && party.has(soundTarget) ? soundTarget : '';
     if (s.loop) { activeLoopIds.add(s.id); if (to) loopTargets.set(s.id, to); else loopTargets.delete(s.id); publishLoopState(); } else sendSound(Object.assign({ action: 'play', id: s.id }, to ? { to } : {}));
@@ -2648,7 +2697,7 @@
     const box = $('#sound-ctl');
     if (!box) return;
     box.innerHTML = '';
-    if (editing || !published.sounds.length || isKicked()) { box.hidden = true; return; }
+    if (editing || !PLAYER_SOUND || !published.sounds.length || isKicked()) { box.hidden = true; return; }
     box.hidden = false;
     if (!soundOn) {
       box.appendChild(btn('Enable sound', 'small', () => { soundOn = true; renderSoundCtl(); syncLoops(); }));
@@ -2732,15 +2781,20 @@
     top.appendChild(up);
     top.appendChild(btn('Stop all', 'small', dmStopAll));
     b.appendChild(top);
-    // Who hears the next sound you play.
-    const now = Date.now(), players = [...party.values()].filter((p) => !p.dm && now - p.ts < ONLINE_MS);
-    if (soundTarget && !players.some((p) => p.id === soundTarget)) soundTarget = '';
-    const tsel = selectInput([['', 'Everyone']].concat(players.map((p) => [p.id, (p.name || 'Unnamed') + ' only'])), soundTarget, (v) => { soundTarget = v; showSounds(); });
-    const tf = field('Play for', tsel);
-    if (soundTarget) tf.classList.add('sound-target-on');
-    b.appendChild(tf);
-    if (soundTarget) b.appendChild(el('p', 'tip', 'Only that player hears what you play next (you hear it too). Loops keep playing just for them until you stop them.'));
-    b.appendChild(el('p', 'tip', `Press Play during the session and it plays on every open map. Loops keep going (and start for anyone who joins) until you stop them. Publish after adding sounds so players get them. Up to ${MAX_AUDIO_MB} MB per file.`));
+    if (PLAYER_SOUND) {
+      // Who hears the next sound you play.
+      const now = Date.now(), players = [...party.values()].filter((p) => !p.dm && now - p.ts < ONLINE_MS);
+      if (soundTarget && !players.some((p) => p.id === soundTarget)) soundTarget = '';
+      const tsel = selectInput([['', 'Everyone']].concat(players.map((p) => [p.id, (p.name || 'Unnamed') + ' only'])), soundTarget, (v) => { soundTarget = v; showSounds(); });
+      const tf = field('Play for', tsel);
+      if (soundTarget) tf.classList.add('sound-target-on');
+      b.appendChild(tf);
+      if (soundTarget) b.appendChild(el('p', 'tip', 'Only that player hears what you play next (you hear it too). Loops keep playing just for them until you stop them.'));
+      b.appendChild(el('p', 'tip', `Press Play during the session and it plays on every open map. Loops keep going (and start for anyone who joins) until you stop them. Publish after adding sounds so players get them. Up to ${MAX_AUDIO_MB} MB per file.`));
+    } else {
+      soundTarget = '';
+      b.appendChild(el('p', 'tip', `Sounds play on your device only. Players don’t hear the soundboard, so play it through your speakers or call if you want the table to hear. Up to ${MAX_AUDIO_MB} MB per file.`));
+    }
     if (!data.sounds.length) { b.appendChild(el('p', 'muted', 'No sounds yet. Pick a category below, then upload MP3s into it.')); }
     // Category chips: show one group at a time so there's less scrolling.
     const cats = SOUND_CATS.filter(([k]) => k || data.sounds.some((s) => !s.cat));
@@ -3162,7 +3216,68 @@
   const DAILY_FOOD = 15, NO_SLEEP = 10;
   const VITALS_KEY = () => 'campaign-map.vitals:' + SITE_KEY, DM_VITALS_KEY = () => 'campaign-map.dmVitals:' + SITE_KEY;
   const pct = (v) => Math.max(0, Math.min(100, Math.round(num(v) == null ? 100 : num(v))));
-  const cleanVitals = (v) => ({ sanity: pct(v && v.sanity), hunger: pct(v && v.hunger), ts: num(v && v.ts) || 0 });
+  // hp: current health (null = full); money: dollars in the wallet.
+  const cleanVitals = (v) => ({
+    sanity: pct(v && v.sanity), hunger: pct(v && v.hunger),
+    hp: v && num(v.hp) != null ? Math.max(0, Math.min(999, Math.round(num(v.hp)))) : null,
+    money: Math.max(0, Math.min(9999999, Math.round((num(v && v.money) || 0) * 100) / 100)),
+    ts: num(v && v.ts) || 0
+  });
+  // Max health from a character sheet: 10 + Vitality × level (same as the sheet's combat profile).
+  function maxHpOf(sheet) {
+    try { return sheet ? Math.max(1, 10 + subValue(sheet, 'endurance', 'Vitality') * (sheet.level || 1)) : 10; } catch (e) { return 10; }
+  }
+  const hpNow = (v, max) => (v.hp == null ? max : Math.min(v.hp, max));
+  const fmtMoney = (m) => '$' + (Number.isInteger(m) ? m.toLocaleString() : m.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  // Health bar: damage and healing. onSet(newHp) saves it.
+  function healthMeter(cur, max, onSet, compact) {
+    const card = el('div', 'vit-card hp-card' + (compact ? ' compact' : ''));
+    const f = max ? cur / max : 0, color = f > 0.6 ? '#4ade80' : f > 0.3 ? '#facc15' : f > 0 ? '#ef4444' : '#7f1d1d';
+    const top = el('div', 'vit-top');
+    top.appendChild(el('b', 'vit-name', 'Health'));
+    if (cur === 0) { const t = el('span', 'vit-tier', 'Down'); t.style.color = t.style.borderColor = '#ef4444'; top.appendChild(t); }
+    top.appendChild(el('span', 'vit-pct', `${cur} / ${max}`));
+    card.appendChild(top);
+    const bar = el('div', 'vit-bar'), fill = el('div', 'vit-fill');
+    fill.style.width = (f * 100).toFixed(1) + '%'; fill.style.background = color;
+    bar.appendChild(fill);
+    card.appendChild(bar);
+    const row = el('div', 'vit-btns');
+    const amt = el('input');
+    amt.type = 'number'; amt.min = '1'; amt.max = '999'; amt.placeholder = 'HP'; amt.title = 'How much';
+    const take = (sign) => () => { const n = Math.max(0, Math.round(+amt.value || 0)); if (!n) { amt.focus(); return; } onSet(Math.max(0, Math.min(max, cur + sign * n))); };
+    row.appendChild(amt);
+    row.appendChild(btn('Damage', 'small danger-text', take(-1)));
+    row.appendChild(btn('Heal', 'small', take(1)));
+    if (cur < max) row.appendChild(btn('Full', 'small ghost', () => onSet(max)));
+    amt.onkeydown = (e) => { if (e.key === 'Enter') take(e.shiftKey ? 1 : -1)(); };
+    card.appendChild(row);
+    if (!compact) card.appendChild(el('p', 'vit-effect', `Max health comes from your character sheet: 10 + Vitality × level.`));
+    return card;
+  }
+  // Wallet: add or spend money. onSet(newAmount) saves it.
+  function walletBox(money, onSet, compact) {
+    const card = el('div', 'vit-card wallet-card' + (compact ? ' compact' : ''));
+    const top = el('div', 'vit-top');
+    top.appendChild(el('b', 'vit-name', 'Wallet'));
+    top.appendChild(el('span', 'wallet-amt', fmtMoney(money)));
+    card.appendChild(top);
+    const row = el('div', 'vit-btns');
+    const amt = el('input');
+    amt.type = 'number'; amt.min = '0'; amt.step = '0.01'; amt.placeholder = '$'; amt.title = 'How much';
+    const move = (sign) => () => {
+      const n = Math.round((+amt.value || 0) * 100) / 100;
+      if (!(n > 0)) { amt.focus(); return; }
+      if (sign < 0 && n > money) { toast(`That’s more than ${compact ? 'they have' : 'you have'} (${fmtMoney(money)}).`, 'warn'); return; }
+      onSet(Math.round((money + sign * n) * 100) / 100);
+    };
+    row.appendChild(amt);
+    row.appendChild(btn('Add', 'small', move(1)));
+    row.appendChild(btn('Spend', 'small ghost', move(-1)));
+    amt.onkeydown = (e) => { if (e.key === 'Enter') move(1)(); };
+    card.appendChild(row);
+    return card;
+  }
   const myVitals = () => cleanVitals(lsGet(VITALS_KEY(), {}));
   let vitalsHeard = false;
   function publishVitals(id, v) {
@@ -3220,6 +3335,9 @@
   function renderVitals(body) {
     const v = myVitals();
     const set = (k) => (nv) => { const cur = myVitals(); cur[k] = nv; publishVitals(me.id, cur); renderLog(); };
+    const max = maxHpOf(loadSheet());
+    body.appendChild(healthMeter(hpNow(v, max), max, set('hp')));
+    body.appendChild(walletBox(v.money, set('money')));
     body.appendChild(vitalMeter('sanity', v.sanity, set('sanity')));
     body.appendChild(vitalMeter('hunger', v.hunger, set('hunger')));
   }
@@ -3236,7 +3354,7 @@
     for (const [id, k] of kicked) if (k.until > now) delete names[id]; // kicked players drop off the list
     const ids = Object.keys(names);
     const wrap = el('div', 'vit-table');
-    wrap.appendChild(el('div', 'sub-h', 'Sanity & hunger'));
+    wrap.appendChild(el('div', 'sub-h', 'Health, wallet, sanity & hunger'));
     if (!ids.length) { wrap.appendChild(el('p', 'muted', 'No players yet.')); return wrap; }
     ids.forEach((id) => {
       const v = cleanVitals(all[id]);
@@ -3247,6 +3365,9 @@
       head.appendChild(btn(online ? 'Kick' : 'Remove', 'small ghost danger-text', () => removePlayer(id, names[id], online ? p : null)));
       row.appendChild(head);
       const set = (k) => (nv) => { const cur = cleanVitals((lsGet(DM_VITALS_KEY(), {}) || {})[id]); cur[k] = nv; publishVitals(id, cur); showCharacters(selectedId); };
+      const max = maxHpOf(sheets[id] && sheets[id].sheet);
+      row.appendChild(healthMeter(hpNow(v, max), max, set('hp'), true));
+      row.appendChild(walletBox(v.money, set('money'), true));
       row.appendChild(vitalMeter('sanity', v.sanity, set('sanity'), true));
       row.appendChild(vitalMeter('hunger', v.hunger, set('hunger'), true));
       wrap.appendChild(row);
@@ -3317,7 +3438,7 @@
   }
   // Set the dice tray up for an active ability's attack; the player presses Roll.
   function loadIntoDice(p) {
-    diceSides = p.sides; diceCount = p.count; diceMod = p.mod; diceNextLabel = p.name;
+    dicePool = [[p.sides, p.count]]; diceMod = p.mod; diceNextLabel = p.name;
     lsSet(DICE_OPEN_KEY, true);
     renderDice(true);
     const m = $('#dice .dice-mod input');
@@ -3922,14 +4043,13 @@
     pt.appendChild(el('b', null, 'Party token'));
     const placeIt = () => setMode({ type: 'party' }, 'Click the map where the party is · Esc to cancel');
     if (!partyPos) {
-      pt.appendChild(el('span', 'tip', 'Show players where the party is. It moves live on everyone’s screen.'));
+      pt.appendChild(el('span', 'tip', 'Keep track of where the party is. It drives travel time, random events and the weather sound. Only you see it.'));
       pt.appendChild(btn('Place the party', 'small accent', placeIt));
     } else {
-      pt.appendChild(el('span', 'tip', partyPos.shown ? 'Drag it on the map to move the party; players see it move live.' : 'Hidden from players.'));
+      pt.appendChild(el('span', 'tip', 'Drag it on the map to move the party. Only you see it.'));
       const r = el('div', 'btn-row');
       r.appendChild(btn('Move here…', 'small', placeIt));
       r.appendChild(btn('Find it', 'small ghost', () => map.easeTo({ center: [partyPos.lng, partyPos.lat], duration: 600 })));
-      r.appendChild(btn(partyPos.shown ? 'Hide from players' : 'Show to players', 'small ghost', () => { setPartyPos(Object.assign({}, partyPos, { shown: !partyPos.shown })); showList(); }));
       pt.appendChild(r);
       const tr = el('div', 'party-travel');
       tr.appendChild(selectInput(Object.entries(TRAVEL).map(([k, v]) => [k, v.name]), partyTravel.mode, (v) => { partyTravel.mode = v; savePartyTravel(); }));
@@ -4656,7 +4776,7 @@
   }
   function renderPartyToken(animate) {
     if (!map) return;
-    const visible = partyPos && (partyPos.shown || editing);
+    const visible = partyPos && editing; // only the DM sees the party token
     if (!visible) { if (partyMarker) { partyMarker.remove(); partyMarker = null; } return; }
     if (!partyMarker) {
       const elx = el('div', 'party-token');
@@ -4783,8 +4903,9 @@
     if (!box && map) { box = el('div'); box.id = 'clock'; document.body.appendChild(box); }
     if (!box) return;
     box.innerHTML = '';
-    if (!editing) { box.hidden = true; return; } // players never see the time
+    if (!editing && !clock) { box.hidden = true; return; } // players see the time once the DM starts the clock
     box.hidden = false;
+    box.classList.toggle('player', !editing);
     const face = el('button', 'clock-face');
     face.type = 'button';
     if (clock) {
@@ -4809,7 +4930,7 @@
     const row = el('div', 'clock-row');
     row.appendChild(field('Day', dayIn)); row.appendChild(field('Time', timeIn));
     p.appendChild(row);
-    p.appendChild(el('p', 'tip', 'Each day starts at 8:00 AM, so 2:00 AM belongs to the night at the end of that day. Players don’t see the clock, only the light changing.'));
+    p.appendChild(el('p', 'tip', 'Each day starts at 8:00 AM, so 2:00 AM belongs to the night at the end of that day. Players see the day and time in the corner, but only you can change it.'));
     p.appendChild(btn(clock ? 'Set time' : 'Start the clock', 'small primary', () => {
       const [h, m] = (timeIn.value || '08:00').split(':').map((v) => +v || 0);
       const d = Math.max(1, Math.round(+dayIn.value || 1));
